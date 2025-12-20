@@ -342,9 +342,20 @@ ${advancedStatistics && advancedStatistics.questionDifficulties && Array.isArray
     return NextResponse.json({ analysis });
   } catch (error: any) {
     console.error('OpenAI API error:', error);
+    
+    // 429 에러 (할당량 초과) 처리
+    if (error.status === 429 || error.message?.includes('429') || error.message?.includes('quota')) {
+      return NextResponse.json(
+        { 
+          error: 'OpenAI API 할당량이 초과되었습니다. 관리자에게 문의하거나 잠시 후 다시 시도해주세요.' 
+        },
+        { status: 429 }
+      );
+    }
+    
     return NextResponse.json(
       { error: error.message || 'Failed to generate analysis' },
-      { status: 500 }
+      { status: error.status || 500 }
     );
   }
 }

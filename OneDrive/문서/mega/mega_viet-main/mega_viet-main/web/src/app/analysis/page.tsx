@@ -269,6 +269,13 @@ export default function AnalysisPage() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // 429 에러 (할당량 초과) 처리
+        if (response.status === 429) {
+          setAiAnalysis(`AI 분석을 생성할 수 없습니다.\n\nOpenAI API 할당량이 초과되었습니다. 관리자에게 문의하거나 잠시 후 다시 시도해주세요.\n\n통계 분석 결과는 아래에서 확인하실 수 있습니다.`);
+          return;
+        }
+        
         throw new Error(errorData.error || `Failed to generate analysis: ${response.status} ${response.statusText}`);
       }
 
@@ -276,9 +283,13 @@ export default function AnalysisPage() {
       setAiAnalysis(result.analysis);
     } catch (error: any) {
       console.error('Failed to generate AI analysis:', error);
-      // 에러 메시지를 사용자에게 표시하거나, 분석 없이 계속 진행
-      // 분석 생성 실패 시에도 계속 진행 (선택적으로 에러 메시지 표시 가능)
-      setAiAnalysis(null);
+      
+      // 에러 메시지를 사용자에게 표시
+      if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('할당량')) {
+        setAiAnalysis(`AI 분석을 생성할 수 없습니다.\n\nOpenAI API 할당량이 초과되었습니다. 관리자에게 문의하거나 잠시 후 다시 시도해주세요.\n\n통계 분석 결과는 아래에서 확인하실 수 있습니다.`);
+      } else {
+        setAiAnalysis(`AI 분석 생성 중 오류가 발생했습니다.\n\n${error.message || '알 수 없는 오류가 발생했습니다.'}\n\n통계 분석 결과는 아래에서 확인하실 수 있습니다.`);
+      }
     } finally {
       setLoadingAnalysis(false);
     }
