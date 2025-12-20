@@ -75,7 +75,11 @@ git push origin main
 1. 배포된 URL로 접속 확인
 2. 홈페이지 로드 확인
 3. 점수 분석 기능 테스트
+   - 정답 필드는 읽기 전용(회색 배경)으로 표시되어야 함
+   - 학생 답안만 입력 가능해야 함
 4. API 엔드포인트 `/api/analyze` 정상 작동 확인
+   - AI 분석 보고서가 정상적으로 생성되는지 확인
+   - 429 에러(할당량 초과) 발생 시 적절한 에러 메시지 표시 확인
 
 ## 문제 해결
 
@@ -86,7 +90,18 @@ git push origin main
 
 ### API가 작동하지 않는 경우
 - `OPENAI_API_KEY` 환경 변수가 올바르게 설정되었는지 확인
+  - Vercel 대시보드 → Settings → Environment Variables에서 확인
+  - Production, Preview, Development 모든 환경에 설정되었는지 확인
 - Vercel 대시보드의 Functions 로그 확인
+  - Deployments → 최신 배포 → Functions 탭에서 로그 확인
+- 429 에러(할당량 초과) 발생 시:
+  - OpenAI API 키의 할당량 확인 (https://platform.openai.com/usage)
+  - 필요시 결제 정보 확인 및 업그레이드
+
+### 정답 필드가 입력 가능한 경우
+- 최신 코드가 배포되었는지 확인 (GitHub 커밋과 Vercel 배포 커밋 비교)
+- 브라우저 캐시 삭제 후 재시도
+- Vercel에서 수동 재배포 실행
 
 ## 추가 정보
 
