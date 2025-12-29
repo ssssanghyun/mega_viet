@@ -1,0 +1,234 @@
+{
+  "generatedAt": "2025-12-29T01:47:55.188Z",
+  "subjects": [
+    {
+      "key": "math1",
+      "name": "MATH 1",
+      "questionCount": 20,
+      "totalStudents": 50,
+      "avgScore": 29.1,
+      "stdDev": 6.69,
+      "median": 30,
+      "questionStats": [
+        {
+          "question": 1,
+          "correct": 11,
+          "total": 50,
+          "rate": 22,
+          "unit": "Algebra & Functions"
+        },
+        {
+          "question": 2,
+          "correct": 11,
+          "total": 50,
+          "rate": 22,
+          "unit": "Algebra & Functions"
+        },
+        {
+          "question": 3,
+          "correct": 1,
+          "total": 50,
+          "rate": 2,
+          "unit": "Algebra & Functions"
+        },
+        {
+          "question": 4,
+          "correct": 6,
+          "total": 50,
+          "rate": 12,
+          "unit": "Algebra & Functions"
+        },
+        {
+          "question": 5,
+          "correct": 30,
+          "total": 50,
+          "rate": 60,
+          "unit": "Algebra & Functions"
+        },
+        {
+          "question": 6,
+          "correct": 25,
+          "total": 50,
+          "rate": 50,
+          "unit": "Trigonometry"
+        },
+        {
+          "question": 7,
+          "correct": 12,
+          "total": 50,
+          "rate": 24,
+          "unit": "Trigonometry"
+        },
+        {
+          "question": 8,
+          "correct": 11,
+          "total": 50,
+          "rate": 22,
+          "unit": "Geometry & Vectors"
+        },
+        {
+          "question": 9,
+          "correct": 10,
+          "total": 50,
+          "rate": 20,
+          "unit": "Geometry & Vectors"
+        },
+        {
+          "question": 10,
+          "correct": 26,
+          "total": 50,
+          "rate": 52,
+          "unit": "Sequences & Binomial Theorem"
+        },
+        {
+          "question": 11,
+          "correct": 14,
+          "total": 50,
+          "rate": 28,
+          "unit": "Sequences & Binomial Theorem"
+        },
+        {
+          "question": 12,
+          "correct": 31,
+          "total": 50,
+          "rate": 62,
+          "unit": "Sequences & Binomial Theorem"
+        },
+        {
+          "question": 13,
+          "correct": 0,
+          "total": 50,
+          "rate": 0,
+          "unit": "Probability & Random Variables"
+        },
+        {
+          "question": 14,
+          "correct": 28,
+          "total": 50,
+          "rate": 56,
+          "unit": "Probability & Random Variables"
+        },
+        {
+          "question": 15,
+          "correct": 5,
+          "total": 50,
+          "rate": 10,
+          "unit": "Limits"
+        },
+        {
+          "question": 16,
+          "correct": 10,
+          "total": 50,
+          "rate": 20,
+          "unit": "Calculus"
+        },
+        {
+          "question": 17,
+          "correct": 35,
+          "total": 50,
+          "rate": 70,
+          "unit": "Calculus"
+        },
+        {
+          "question": 18,
+          "correct": 7,
+          "total": 50,
+          "rate": 14,
+          "unit": "Calculus"
+        },
+        {
+          "question": 19,
+          "correct": 3,
+          "total": 50,
+          "rate": 6,
+          "unit": "Calculus"
+        },
+        {
+          "question": 20,
+          "correct": 15,
+          "total": 50,
+          "rate": 30,
+          "unit": "Calculus"
+        }
+      ],
+      "unitStats": [
+        {
+          "unit": "Algebra & Functions",
+          "correct": 59,
+          "total": 250,
+          "rate": 23.6,
+          "questions": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "unit": "Trigonometry",
+          "correct": 37,
+          "total": 100,
+          "rate": 37,
+          "questions": [
+            6,
+            7
+          ]
+        },
+        {
+          "unit": "Geometry & Vectors",
+          "correct": 21,
+          "total": 100,
+          "rate": 21,
+          "questions": [
+            8,
+            9
+          ]
+        },
+        {
+          "unit": "Sequences & Binomial Theorem",
+          "correct": 71,
+          "total": 150,
+          "rate": 47.33,
+          "questions": [
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "unit": "Probability & Random Variables",
+          "correct": 28,
+          "total": 100,
+          "rate": 28,
+          "questions": [
+            13,
+            14
+          ]
+        },
+        {
+          "unit": "Limits",
+          "correct": 5,
+          "total": 50,
+          "rate": 10,
+          "questions": [
+            15
+          ]
+        },
+        {
+          "unit": "Calculus",
+          "correct": 70,
+          "total": 250,
+          "rate": 28,
+          "questions": [
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -8,8 +8,8 @@ export default function Header() {
   const pathname = usePathname();
 
   const navItems = [
-    { href: '/', label: '홈' },
-    { href: '/#analysis-form', label: '점수 분석' },
+    { href: '/', label: 'หน้าแรก' },
+    { href: '/#analysis-form', label: 'วิเคราะห์คะแนน' },
   ];
 
   return (

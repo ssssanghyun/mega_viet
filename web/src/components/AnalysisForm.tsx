@@ -1,168 +1,168 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef } from 'react';
+import { Upload, FileSpreadsheet, Loader2, CheckCircle2 } from 'lucide-react';
 
-const QUESTION_CATEGORIES = [
-  { start: 1, end: 10, category: 'Speaking', subCategory: 'Question and Response' },
-  { start: 11, end: 20, category: 'Speaking', subCategory: 'Short conversations' },
-  { start: 21, end: 30, category: 'Speaking', subCategory: 'Long conversations' },
-  { start: 31, end: 45, category: 'Reading', subCategory: 'Text completion' },
-  { start: 46, end: 60, category: 'Reading', subCategory: 'Reading comprehension' },
-];
+interface UploadResult {
+  reportCount: number;
+  statsPath: string;
+  skippedSubjects?: string[];
+  files?: { filename: string; data: string }[];
+}
 
 export default function AnalysisForm() {
-  const router = useRouter();
-  const [name, setName] = useState('');
-  const [correctAnswers, setCorrectAnswers] = useState<string[]>(Array(60).fill(''));
-  const [studentAnswers, setStudentAnswers] = useState<string[]>(Array(60).fill(''));
-  const [activeTab, setActiveTab] = useState(0);
+  const [math1File, setMath1File] = useState<File | null>(null);
+  const [math2File, setMath2File] = useState<File | null>(null);
+  const [engFile, setEngFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<UploadResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const math1InputRef = useRef<HTMLInputElement>(null);
+  const math2InputRef = useRef<HTMLInputElement>(null);
+  const engInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFileChange = (
+    setter: (file: File | null) => void,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0] || null;
+    setter(file);
+  };
 
-    // Validate inputs
-    if (!name.trim()) {
-      alert('이름을 입력해주세요.');
+  const handleSubmit = async () => {
+    setError(null);
+    setResult(null);
+
+    if (!math1File && !math2File && !engFile) {
+      setError('กรุณาอัปโหลดไฟล์ OMR อย่างน้อย 1 วิชา');
       return;
     }
 
-    const formData = {
-      name,
-      correctAnswers: correctAnswers.map(a => parseInt(a) || 0),
-      studentAnswers: studentAnswers.map(a => parseInt(a) || 0),
-    };
+    setIsSubmitting(true);
 
-    localStorage.setItem('examFormData', JSON.stringify(formData));
-    router.push('/analysis');
-  };
+    try {
+      const formData = new FormData();
+      if (math1File) formData.append('math1', math1File);
+      if (math2File) formData.append('math2', math2File);
+      if (engFile) formData.append('eng', engFile);
 
-  const handleCorrectAnswerChange = (index: number, value: string) => {
-    const newAnswers = [...correctAnswers];
-    newAnswers[index] = value;
-    setCorrectAnswers(newAnswers);
-  };
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        body: formData,
+      });
 
-  const handleStudentAnswerChange = (index: number, value: string) => {
-    const newAnswers = [...studentAnswers];
-    newAnswers[index] = value;
-    setStudentAnswers(newAnswers);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'เกิดข้อผิดพลาดในการประมวลผลไฟล์');
+      }
+
+      if (Array.isArray(data.files)) {
+        data.files.forEach((file: { filename: string; data: string }) => {
+          const byteCharacters = atob(file.data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = file.filename;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(link.href);
+        });
+      }
+
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการประมวลผลไฟล์');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-xl p-8 card-shadow">
-      {/* 이름 입력 */}
+    <div className="bg-white rounded-xl p-8 card-shadow">
+      {/* File Upload Section */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-4">
           <div className="w-1 h-4 bg-blue-600 rounded"></div>
-          <span className="font-medium text-gray-900">학생 정보</span>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">이름</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="이름을 입력하세요"
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-      </div>
-
-      {/* 문제 카테고리 탭 */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-1 h-4 bg-blue-600 rounded"></div>
-          <span className="font-medium text-gray-900">답안 입력 (60문제)</span>
+          <span className="font-medium text-gray-900">อัปโหลดไฟล์ OMR (3 วิชา)</span>
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-4">
-          {QUESTION_CATEGORIES.map((cat, index) => (
-            <button
-              key={index}
-              type="button"
-              onClick={() => setActiveTab(index)}
-              className={`px-3 py-1.5 text-xs rounded-full transition-colors ${
-                activeTab === index
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            { label: 'Math 1 OMR', ref: math1InputRef, file: math1File, setter: setMath1File },
+            { label: 'Math 2 OMR', ref: math2InputRef, file: math2File, setter: setMath2File },
+            { label: 'ENG OMR', ref: engInputRef, file: engFile, setter: setEngFile },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer"
+              onClick={() => item.ref.current?.click()}
             >
-              {cat.subCategory} ({cat.start}-{cat.end})
-            </button>
+              <input
+                ref={item.ref}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => handleFileChange(item.setter, e)}
+                className="hidden"
+              />
+              <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-900">{item.label}</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {item.file ? item.file.name : 'คลิกเพื่ออัปโหลด'}
+              </p>
+            </div>
           ))}
         </div>
 
-        {/* 현재 탭의 문제들 */}
-        <div className="border border-gray-200 rounded-lg p-4">
-          <div className="text-xs text-gray-500 mb-3">
-            {QUESTION_CATEGORIES[activeTab].category} - {QUESTION_CATEGORIES[activeTab].subCategory}
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
           </div>
+        )}
 
-          <div className="grid grid-cols-1 gap-3">
-            <div className="grid grid-cols-12 gap-2 text-xs text-gray-500 font-medium pb-2 border-b">
-              <div className="col-span-2">문제</div>
-              <div className="col-span-5">정답</div>
-              <div className="col-span-5">내 답안</div>
-            </div>
-
-            {Array.from(
-              { length: QUESTION_CATEGORIES[activeTab].end - QUESTION_CATEGORIES[activeTab].start + 1 },
-              (_, i) => QUESTION_CATEGORIES[activeTab].start + i
-            ).map((questionNum) => (
-              <div key={questionNum} className="grid grid-cols-12 gap-2 items-center">
-                <div className="col-span-2 text-sm font-medium text-gray-700">
-                  Q{questionNum}
-                </div>
-                <div className="col-span-5">
-                  <select
-                    value={correctAnswers[questionNum - 1]}
-                    onChange={(e) => handleCorrectAnswerChange(questionNum - 1, e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">선택</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                  </select>
-                </div>
-                <div className="col-span-5">
-                  <select
-                    value={studentAnswers[questionNum - 1]}
-                    onChange={(e) => handleStudentAnswerChange(questionNum - 1, e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">선택</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                  </select>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 입력 현황 */}
-        <div className="mt-4 flex items-center justify-between text-sm">
-          <div className="text-gray-500">
-            정답 입력: <span className="font-medium text-blue-600">{correctAnswers.filter(a => a).length}/60</span>
-          </div>
-          <div className="text-gray-500">
-            내 답안 입력: <span className="font-medium text-blue-600">{studentAnswers.filter(a => a).length}/60</span>
-          </div>
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg text-xs text-gray-500">
+          สามารถอัปโหลดไฟล์ OMR แยกแต่ละวิชาได้ (Math1, Math2, ENG) ระบบจะสร้างรายงานเฉพาะวิชาที่อัปโหลด
         </div>
       </div>
 
       <button
-        type="submit"
-        className="w-full bg-gray-900 text-white py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors"
+        onClick={handleSubmit}
+        disabled={isSubmitting}
+        className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:bg-gray-400"
       >
-        결과 분석하기
+        {isSubmitting ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            กำลังสร้างรายงาน...
+          </>
+        ) : (
+          <>
+            <FileSpreadsheet className="w-5 h-5" />
+            สร้างรายงาน PDF ทั้งหมด
+          </>
+        )}
       </button>
-    </form>
+
+      {result && (
+        <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+          <div className="flex items-center gap-2 font-medium">
+            <CheckCircle2 className="h-4 w-4" />
+            รายงานสร้างสำเร็จ {result.reportCount} ไฟล์
+          </div>
+          <div className="mt-2 text-xs text-green-600">
+            บันทึกไว้ที่ {result.statsPath}
+          </div>
+          {result.skippedSubjects && result.skippedSubjects.length > 0 && (
+            <div className="mt-2 text-xs text-green-600">
+              ข้ามวิชา: {result.skippedSubjects.join(', ')}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

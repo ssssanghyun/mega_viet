@@ -1,14 +1,18 @@
-import * as XLSX from 'xlsx';
 import {
   StudentResult,
-  QuestionResult,
   ExamStatistics,
   QuestionStatistics,
   CategoryStatistics,
   StudentAnalysis,
+  AdvancedStatistics,
+  QuestionDifficulty,
+  QuestionDiscrimination,
+  DifficultyDistribution,
+  DifficultyLevelPerformance,
 } from './types';
+import { examData } from './examData';
 
-// Question categories mapping
+// Question categories mapping (used for statistics calculations)
 const questionCategories: { [key: number]: { category: string; subCategory: string } } = {};
 
 // Questions 1-10: Speaking Question and Response
@@ -32,69 +36,30 @@ for (let i = 46; i <= 60; i++) {
   questionCategories[i] = { category: 'Reading', subCategory: 'Reading comprehension' };
 }
 
+/**
+ * Load exam data from hardcoded data file
+ * This avoids Excel file reading errors and improves performance
+ */
 export async function loadExamData(): Promise<StudentResult[]> {
-  const response = await fetch('/data.xlsx');
-  const arrayBuffer = await response.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-  const sheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[sheetName];
-  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+  // Return the hardcoded exam data directly
+  // Using Promise.resolve to maintain the async API for backward compatibility
+  return Promise.resolve(examData);
+}
 
-  const students: StudentResult[] = [];
-
-  // Skip header rows (0, 1) and process student data starting from row 2
-  for (let rowIndex = 2; rowIndex < jsonData.length; rowIndex++) {
-    const row = jsonData[rowIndex];
-    if (!row || !row[0]) continue;
-
-    const studentCode = String(row[0] || '');
-    const date = String(row[1] || '');
-    const id = String(row[2] || '');
-    const pointStr = String(row[3] || '0');
-    const rankStr = String(row[4] || '0');
-
-    // Parse point (format: "95.17 / 100")
-    const pointMatch = pointStr.match(/(\d+\.?\d*)/);
-    const point = pointMatch ? parseFloat(pointMatch[1]) : 0;
-    const maxPoint = 100;
-
-    const rank = parseInt(rankStr) || 0;
-
-    const answers: QuestionResult[] = [];
-
-    // Each question has 3 columns: answer, input, conclusion (O/X)
-    // Starting from column 5 (index 5)
-    for (let q = 1; q <= 60; q++) {
-      const baseIndex = 5 + (q - 1) * 3;
-      const correctAnswer = parseInt(String(row[baseIndex] || '0')) || 0;
-      const studentAnswer = parseInt(String(row[baseIndex + 1] || '0')) || 0;
-      const conclusion = String(row[baseIndex + 2] || '');
-      const isCorrect = conclusion === 'O';
-
-      const categoryInfo = questionCategories[q] || { category: 'Unknown', subCategory: 'Unknown' };
-
-      answers.push({
-        questionNumber: q,
-        category: categoryInfo.category,
-        subCategory: categoryInfo.subCategory,
-        correctAnswer,
-        studentAnswer,
-        isCorrect,
-      });
-    }
-
-    students.push({
-      studentCode,
-      date,
-      id,
-      point,
-      maxPoint,
-      rank,
-      answers,
-    });
+/**
+ * Get correct answers for all 60 questions
+ * Extracts correct answers from the exam data (all students have the same correct answers)
+ */
+export function getCorrectAnswers(): number[] {
+  if (examData.length === 0) {
+    return Array(60).fill(0);
   }
-
-  return students;
+  
+  // Extract correct answers from the first student (all students have the same correct answers)
+  const firstStudent = examData[0];
+  return firstStudent.answers
+    .sort((a, b) => a.questionNumber - b.questionNumber)
+    .map((answer) => answer.correctAnswer);
 }
 
 export function calculateStatistics(students: StudentResult[]): ExamStatistics {
@@ -276,4 +241,185 @@ export function getScatterData(students: StudentResult[]) {
     id: student.id,
     rank: student.rank,
   }));
+}
+
+/**
+ * Calculate advanced statistics including p-value, D-index, KR-20
+ */
+export function calculateAdvancedStatistics(
+  students: StudentResult[],
+  studentAnswers?: number[]
+): AdvancedStatistics {
+  if (students.length === 0) {
+    return {
+      kr20: 0,
+      questionDifficulties: [],
+      questionDiscriminations: [],
+      difficultyDistribution: { easy: 0, medium: 0, hard: 0 },
+      studentDifficultyPerformance: [],
+    };
+  }
+
+  const totalStudents = students.length;
+  const top10Count = Math.ceil(totalStudents * 0.1);
+  const bottom10Count = Math.ceil(totalStudents * 0.1);
+
+  // Sort students by score
+  const sortedStudents = [...students].sort((a, b) => b.point - a.point);
+  const top10Students = sortedStudents.slice(0, top10Count);
+  const bottom10Students = sortedStudents.slice(-bottom10Count);
+
+  // Calculate question difficulties (p-value)
+  const questionDifficulties: QuestionDifficulty[] = [];
+  for (let q = 1; q <= 60; q++) {
+    const categoryInfo = questionCategories[q] || { category: 'Unknown', subCategory: 'Unknown' };
+    let correctCount = 0;
+    let totalAttempts = 0;
+
+    students.forEach((student) => {
+      const answer = student.answers.find((a) => a.questionNumber === q);
+      if (answer) {
+        totalAttempts++;
+        if (answer.isCorrect) correctCount++;
+      }
+    });
+
+    const pValue = totalAttempts > 0 ? correctCount / totalAttempts : 0;
+
+    questionDifficulties.push({
+      questionNumber: q,
+      pValue,
+      category: categoryInfo.category,
+      subCategory: categoryInfo.subCategory,
+    });
+  }
+
+  // Calculate question discriminations (D-index)
+  const questionDiscriminations: QuestionDiscrimination[] = [];
+  for (let q = 1; q <= 60; q++) {
+    const categoryInfo = questionCategories[q] || { category: 'Unknown', subCategory: 'Unknown' };
+    
+    // Top 10% correct rate
+    let top10Correct = 0;
+    top10Students.forEach((student) => {
+      const answer = student.answers.find((a) => a.questionNumber === q);
+      if (answer && answer.isCorrect) top10Correct++;
+    });
+    const top10Rate = top10Count > 0 ? top10Correct / top10Count : 0;
+
+    // Bottom 10% correct rate
+    let bottom10Correct = 0;
+    bottom10Students.forEach((student) => {
+      const answer = student.answers.find((a) => a.questionNumber === q);
+      if (answer && answer.isCorrect) bottom10Correct++;
+    });
+    const bottom10Rate = bottom10Count > 0 ? bottom10Correct / bottom10Count : 0;
+
+    const gap = top10Rate - bottom10Rate;
+    const dIndex = gap; // Simplified D-index approximation
+
+    const pValue = questionDifficulties[q - 1].pValue;
+
+    questionDiscriminations.push({
+      questionNumber: q,
+      dIndex,
+      top10Rate,
+      bottom10Rate,
+      gap,
+      pValue,
+      category: categoryInfo.category,
+      subCategory: categoryInfo.subCategory,
+    });
+  }
+
+  // Difficulty distribution
+  const difficultyDistribution: DifficultyDistribution = {
+    easy: questionDifficulties.filter((q) => q.pValue >= 0.7).length,
+    medium: questionDifficulties.filter((q) => q.pValue > 0.3 && q.pValue < 0.7).length,
+    hard: questionDifficulties.filter((q) => q.pValue <= 0.3).length,
+  };
+
+  // Calculate KR-20 reliability
+  const kr20 = calculateKR20(students, questionDifficulties);
+
+  // Student difficulty performance (if student answers provided)
+  let studentDifficultyPerformance: DifficultyLevelPerformance[] = [];
+  if (studentAnswers) {
+    const easyQuestions = questionDifficulties.filter((q) => q.pValue >= 0.7).map((q) => q.questionNumber);
+    const mediumQuestions = questionDifficulties.filter((q) => q.pValue > 0.3 && q.pValue < 0.7).map((q) => q.questionNumber);
+    const hardQuestions = questionDifficulties.filter((q) => q.pValue <= 0.3).map((q) => q.questionNumber);
+
+    // Get correct answers
+    const correctAnswers = getCorrectAnswers();
+
+    // Calculate performance for each difficulty level
+    const calculateLevelPerformance = (questionNumbers: number[], level: 'easy' | 'medium' | 'hard') => {
+      let correct = 0;
+      questionNumbers.forEach((qNum) => {
+        if (studentAnswers[qNum - 1] === correctAnswers[qNum - 1] && studentAnswers[qNum - 1] !== 0) {
+          correct++;
+        }
+      });
+      const total = questionNumbers.length;
+      const correctRate = total > 0 ? (correct / total) * 100 : 0;
+
+      // Calculate average for this level
+      const avgCorrectRate = questionNumbers.reduce((sum, qNum) => {
+        const q = questionDifficulties.find((qd) => qd.questionNumber === qNum);
+        return sum + (q ? q.pValue * 100 : 0);
+      }, 0) / total;
+
+      return {
+        level,
+        studentCorrectRate: correctRate,
+        averageCorrectRate: avgCorrectRate,
+        questionCount: total,
+        correctCount: correct,
+      };
+    };
+
+    studentDifficultyPerformance = [
+      calculateLevelPerformance(easyQuestions, 'easy'),
+      calculateLevelPerformance(mediumQuestions, 'medium'),
+      calculateLevelPerformance(hardQuestions, 'hard'),
+    ];
+  }
+
+  return {
+    kr20,
+    questionDifficulties,
+    questionDiscriminations,
+    difficultyDistribution,
+    studentDifficultyPerformance,
+  };
+}
+
+/**
+ * Calculate KR-20 reliability coefficient
+ */
+function calculateKR20(students: StudentResult[], questionDifficulties: QuestionDifficulty[]): number {
+  if (students.length === 0 || questionDifficulties.length === 0) return 0;
+
+  const totalQuestions = questionDifficulties.length;
+  const totalStudents = students.length;
+
+  // Calculate total score variance
+  const scores = students.map((s) => s.point);
+  const meanScore = scores.reduce((a, b) => a + b, 0) / totalStudents;
+  const variance = scores.reduce((sum, score) => sum + Math.pow(score - meanScore, 2), 0) / totalStudents;
+
+  if (variance === 0) return 0;
+
+  // Calculate sum of pq for each question
+  let sumPQ = 0;
+  questionDifficulties.forEach((q) => {
+    const p = q.pValue;
+    const q_val = 1 - p;
+    sumPQ += p * q_val;
+  });
+
+  // KR-20 formula: (n / (n-1)) * (1 - sum(pq) / variance)
+  const kr20 = (totalQuestions / (totalQuestions - 1)) * (1 - sumPQ / variance);
+
+  return Math.max(0, Math.min(1, kr20)); // Clamp between 0 and 1
 }

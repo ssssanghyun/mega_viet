@@ -6,7 +6,6 @@ import Header from '@/components/Header';
 import StatCard from '@/components/StatCard';
 import ProgressCircle from '@/components/ProgressCircle';
 import ScatterChart from '@/components/ScatterChart';
-import UniversityCard from '@/components/UniversityCard';
 import HistogramChart from '@/components/HistogramChart';
 import DifficultyDistributionChart from '@/components/DifficultyDistributionChart';
 import DifficultyDiscriminationChart from '@/components/DifficultyDiscriminationChart';
@@ -338,7 +337,7 @@ export default function AnalysisPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">결과를 분석하고 있습니다...</p>
+          <p className="text-gray-600">กำลังวิเคราะห์ผลลัพธ์...</p>
         </div>
       </div>
     );
@@ -359,110 +358,6 @@ export default function AnalysisPage() {
     rank: nationalRank,
   };
 
-  // University recommendations based on percentile
-  const getUniversityRecommendations = () => {
-    if (percentileDisplay <= 10) {
-      return [
-        {
-          tier: 'A Tier - 도전',
-          tierLabel: '합격 확률 30-50%',
-          tierColor: 'red',
-          universities: [
-            { name: '서울대학교', department: '자연과학대학', change: -5 },
-            { name: '연세대학교', department: '공과대학', change: -3 },
-            { name: '고려대학교', department: '이과대학', change: -2 },
-          ],
-        },
-        {
-          tier: 'B Tier - 적정',
-          tierLabel: '합격 확률 50-80%',
-          tierColor: 'orange',
-          universities: [
-            { name: '성균관대학교', department: '자연과학대학', change: 2 },
-            { name: '한양대학교', department: '공과대학', change: 4 },
-            { name: '중앙대학교', department: '이과대학', change: 5 },
-          ],
-        },
-        {
-          tier: 'C Tier - 안정',
-          tierLabel: '합격 확률 80%+',
-          tierColor: 'green',
-          universities: [
-            { name: '경희대학교', department: '자연과학대학', change: 8 },
-            { name: '건국대학교', department: '공과대학', change: 10 },
-            { name: '동국대학교', department: '이과대학', change: 12 },
-          ],
-        },
-      ];
-    } else if (percentileDisplay <= 30) {
-      return [
-        {
-          tier: 'A Tier - 도전',
-          tierLabel: '합격 확률 30-50%',
-          tierColor: 'red',
-          universities: [
-            { name: '성균관대학교', department: '자연과학대학', change: -8 },
-            { name: '한양대학교', department: '공과대학', change: -6 },
-            { name: '중앙대학교', department: '이과대학', change: -4 },
-          ],
-        },
-        {
-          tier: 'B Tier - 적정',
-          tierLabel: '합격 확률 50-80%',
-          tierColor: 'orange',
-          universities: [
-            { name: '경희대학교', department: '자연과학대학', change: 2 },
-            { name: '건국대학교', department: '공과대학', change: 4 },
-            { name: '동국대학교', department: '이과대학', change: 5 },
-          ],
-        },
-        {
-          tier: 'C Tier - 안정',
-          tierLabel: '합격 확률 80%+',
-          tierColor: 'green',
-          universities: [
-            { name: '홍익대학교', department: '자연과학대학', change: 10 },
-            { name: '숭실대학교', department: '공과대학', change: 12 },
-            { name: '세종대학교', department: '이과대학', change: 15 },
-          ],
-        },
-      ];
-    } else {
-      return [
-        {
-          tier: 'A Tier - 도전',
-          tierLabel: '합격 확률 30-50%',
-          tierColor: 'red',
-          universities: [
-            { name: '경희대학교', department: '자연과학대학', change: -10 },
-            { name: '건국대학교', department: '공과대학', change: -8 },
-            { name: '동국대학교', department: '이과대학', change: -6 },
-          ],
-        },
-        {
-          tier: 'B Tier - 적정',
-          tierLabel: '합격 확률 50-80%',
-          tierColor: 'orange',
-          universities: [
-            { name: '홍익대학교', department: '자연과학대학', change: 2 },
-            { name: '숭실대학교', department: '공과대학', change: 4 },
-            { name: '세종대학교', department: '이과대학', change: 5 },
-          ],
-        },
-        {
-          tier: 'C Tier - 안정',
-          tierLabel: '합격 확률 80%+',
-          tierColor: 'green',
-          universities: [
-            { name: '광운대학교', department: '자연과학대학', change: 10 },
-            { name: '명지대학교', department: '공과대학', change: 12 },
-            { name: '상명대학교', department: '이과대학', change: 15 },
-          ],
-        },
-      ];
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -470,99 +365,99 @@ export default function AnalysisPage() {
       <div className="max-w-5xl mx-auto px-4 py-8">
         {/* Page Title */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">점수 분석 결과</h1>
+          <h1 className="text-2xl font-bold text-gray-900">ผลการวิเคราะห์คะแนน</h1>
           <div className="text-sm text-gray-500">
-            학생: <span className="font-medium text-gray-900">{formData.name}</span>
+            นักเรียน: <span className="font-medium text-gray-900">{formData.name}</span>
           </div>
         </div>
 
-        {/* ========== 1. 시험 결과 분석 ========== */}
+        {/* ========== 1. ผลการวิเคราะห์การสอบ ========== */}
         <section className="bg-white rounded-xl p-6 card-shadow mb-6">
           <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">1</span>
-            시험 결과 분석
+            ผลการวิเคราะห์การสอบ
           </h2>
 
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <StatCard
               value={score.toFixed(1)}
-              label="원점수"
-              sublabel={`${correctCount}/60 정답`}
+              label="คะแนนดิบ"
+              sublabel={`${correctCount}/60 ข้อถูก`}
               highlight
             />
             <StatCard
-              value={`상위 ${percentileDisplay}%`}
-              label="백분위"
-              sublabel="전국 기준"
+              value={`สูงสุด ${percentileDisplay}%`}
+              label="เปอร์เซ็นไทล์"
+              sublabel="ระดับประเทศ"
               highlight
             />
             <StatCard
               value={nationalRank.toLocaleString()}
-              label="전국 순위"
-              sublabel={`/${(students.length + 1).toLocaleString()}명`}
+              label="อันดับระดับประเทศ"
+              sublabel={`/${(students.length + 1).toLocaleString()} คน`}
             />
             <StatCard
               value={standardScore.toFixed(0)}
-              label="표준 점수"
+              label="คะแนนมาตรฐาน"
               sublabel="T-Score"
             />
           </div>
 
-          {/* 시험 품질 & 난이도 특성 */}
+          {/* คุณภาพการสอบ & ลักษณะระดับความยาก */}
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-900 mb-3">시험 품질</h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-3">คุณภาพการสอบ</h3>
               <ul className="text-sm text-gray-600 space-y-2">
                 <li className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  문항 수: 60문항
+                  จำนวนข้อสอบ: 60 ข้อ
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  평균 점수: {statistics?.averageScore.toFixed(1) || '-'}점
+                  คะแนนเฉลี่ย: {statistics?.averageScore.toFixed(1) || '-'} คะแนน
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                  표준편차: {statistics?.standardDeviation.toFixed(2) || '-'}
+                  ส่วนเบี่ยงเบนมาตรฐาน: {statistics?.standardDeviation.toFixed(2) || '-'}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                  상위 10% 평균: {statistics?.top10PercentAverage.toFixed(1) || '-'}점
+                  ค่าเฉลี่ยสูงสุด 10%: {statistics?.top10PercentAverage.toFixed(1) || '-'} คะแนน
                 </li>
               </ul>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-900 mb-3">난이도 특성</h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-3">ลักษณะของการสอบครั้งนี้</h3>
               <p className="text-sm text-gray-600 leading-relaxed">
-                이번 시험은 전반적으로 {statistics && statistics.averageScore < 50 ? '어려운' : statistics && statistics.averageScore < 70 ? '보통' : '쉬운'} 수준으로 출제되었습니다.
-                {' '}귀하의 점수는 난이도를 고려했을 때 실질적으로{' '}
-                <strong className="text-blue-600">상위 {percentileDisplay}%</strong> 수준에 해당합니다.
+                การสอบครั้งนี้มีความยากระดับ{statistics && statistics.averageScore < 50 ? 'สูง' : statistics && statistics.averageScore < 70 ? 'ปานกลาง' : 'ต่ำ'}
+                {' '}คะแนนของคุณเมื่อพิจารณาจากความยากของข้อสอบแล้ว อยู่ในระดับ{' '}
+                <strong className="text-blue-600">สูงสุด {percentileDisplay}%</strong>
               </p>
               <div className="mt-3 flex items-center gap-2">
                 <AlertCircle size={14} className="text-blue-500" />
                 <span className="text-xs text-gray-500">
-                  {students.length}명의 응시자 데이터 기준
+                  จากผู้เข้าสอบ {students.length} คน
                 </span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ========== 2. 한눈에 보는 나의 위치 ========== */}
+        {/* ========== 2. ตำแหน่งของฉันในภาพรวม ========== */}
         <section className="bg-white rounded-xl p-6 card-shadow mb-6">
           <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">2</span>
-            한눈에 보는 나의 위치
+            ตำแหน่งของฉันในภาพรวม
           </h2>
 
           <div className="flex flex-col lg:flex-row items-center gap-8">
             <div className="flex-shrink-0">
               <ProgressCircle
                 percentage={percentile}
-                label={`상위 ${percentileDisplay}%`}
-                sublabel="전국 단위"
+                label={`สูงสุด ${percentileDisplay}%`}
+                sublabel="ระดับประเทศ"
                 size={180}
               />
             </div>
@@ -574,18 +469,18 @@ export default function AnalysisPage() {
                 averageScore={statistics?.averageScore}
               />
               <p className="text-xs text-gray-500 text-center mt-2">
-                파란 점: 전체 응시자 / 빨간 별: 나의 위치
+                จุดสีน้ำเงิน: ผู้เข้าสอบทั้งหมด / ดาวสีแดง: ตำแหน่งของฉัน
               </p>
             </div>
           </div>
         </section>
 
-        {/* ========== 3. AI 종합 분석 보고서 ========== */}
+        {/* ========== 3. รายงานการวิเคราะห์ AI ========== */}
         {aiAnalysis && (
         <section className="bg-white rounded-xl p-6 card-shadow mb-6">
             <h2 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
             <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">3</span>
-              AI 종합 분석 보고서
+              รายงานการวิเคราะห์ AI
             </h2>
             <div className="prose prose-sm max-w-none">
               <div className="whitespace-pre-wrap text-gray-700 leading-relaxed bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-8 border-2 border-blue-200 shadow-sm">
@@ -629,82 +524,60 @@ export default function AnalysisPage() {
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-gray-700 font-medium mb-2">AI가 종합 분석 보고서를 생성하고 있습니다...</p>
-                <p className="text-sm text-gray-500">모든 통계 데이터를 종합하여 상세한 보고서를 작성 중입니다.</p>
+                <p className="text-gray-700 font-medium mb-2">AI กำลังสร้างรายงานการวิเคราะห์...</p>
+                <p className="text-sm text-gray-500">กำลังรวบรวมข้อมูลทั้งหมดเพื่อสร้างรายงานโดยละเอียด</p>
               </div>
             </div>
           </section>
         )}
 
-        {/* ========== 4. 시험 해석 ========== */}
+        {/* ========== 4. วิธีอ่านผลลัพธ์นี้ ========== */}
         <section className="bg-white rounded-xl p-6 card-shadow mb-6">
           <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">4</span>
-            시험 해석
+            วิธีอ่านผลลัพธ์นี้
           </h2>
 
           <div className="text-center py-6 border-b border-gray-100 mb-6">
-            <div className="text-4xl font-bold text-blue-600 mb-2">상위 {percentileDisplay}%</div>
-            <div className="text-sm text-gray-500">전국 단위 ({students.length + 1}명 중 {nationalRank}위)</div>
+            <div className="text-4xl font-bold text-blue-600 mb-2">สูงสุด {percentileDisplay}%</div>
+            <div className="text-sm text-gray-500">ระดับประเทศ (อันดับ {nationalRank} จาก {students.length + 1} คน)</div>
           </div>
 
           <div className="space-y-4">
             <div className="bg-blue-50 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-blue-900 mb-2">점수 해석</h3>
+              <h3 className="text-sm font-medium text-blue-900 mb-2">การตีความคะแนน</h3>
               <ul className="text-sm text-blue-800 space-y-1">
-                <li>• 원점수 {score.toFixed(1)}점으로 60문제 중 {correctCount}문제를 맞추셨습니다.</li>
-                <li>• 표준점수 {standardScore.toFixed(0)}점은 난이도를 보정한 점수입니다.</li>
-                <li>• 전국 {students.length + 1}명 중 {nationalRank}위에 해당합니다.</li>
+                <li>• คะแนนดิบ {score.toFixed(1)} คะแนน หมายความว่าคุณตอบถูก {correctCount} ข้อจาก 60 ข้อ</li>
+                <li>• คะแนนมาตรฐาน {standardScore.toFixed(0)} คะแนน เป็นคะแนนที่ปรับตามระดับความยากของข้อสอบ</li>
+                <li>• คุณอยู่ในอันดับที่ {nationalRank} จากผู้เข้าสอบ {students.length + 1} คน</li>
               </ul>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-900 mb-2">등급 환산</h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-2">การแปลงเกรด</h3>
               <div className="flex items-center gap-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-900">{Math.ceil(percentileDisplay / 11)}등급</div>
-                  <div className="text-xs text-gray-500">예상 등급</div>
+                  <div className="text-2xl font-bold text-gray-900">เกรด {Math.ceil(percentileDisplay / 11)}</div>
+                  <div className="text-xs text-gray-500">เกรดโดยประมาณ</div>
                 </div>
                 <div className="flex-1 text-sm text-gray-600">
-                  {percentileDisplay <= 4 && '최상위권으로 SKY 대학 지원이 가능합니다.'}
-                  {percentileDisplay > 4 && percentileDisplay <= 11 && '상위권으로 주요 대학 지원이 가능합니다.'}
-                  {percentileDisplay > 11 && percentileDisplay <= 23 && '중상위권으로 중위권 대학 지원을 고려해보세요.'}
-                  {percentileDisplay > 23 && percentileDisplay <= 40 && '중위권으로 안정적인 대학 선택을 추천드립니다.'}
-                  {percentileDisplay > 40 && '기초 학습 보강이 필요합니다. 약점 영역을 집중 공략하세요.'}
+                  {percentileDisplay <= 4 && 'อยู่ในกลุ่มท็อป สามารถสมัครมหาวิทยาลัยชั้นนำได้'}
+                  {percentileDisplay > 4 && percentileDisplay <= 11 && 'อยู่ในระดับสูง สามารถสมัครมหาวิทยาลัยหลักได้'}
+                  {percentileDisplay > 11 && percentileDisplay <= 23 && 'อยู่ในระดับกลาง-สูง ควรพิจารณามหาวิทยาลัยระดับกลาง'}
+                  {percentileDisplay > 23 && percentileDisplay <= 40 && 'อยู่ในระดับกลาง แนะนำให้เลือกมหาวิทยาลัยที่มั่นคง'}
+                  {percentileDisplay > 40 && 'ต้องการเสริมการเรียนรู้พื้นฐาน มุ่งเน้นพัฒนาจุดอ่อน'}
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ========== 5. 지원 가능 대학 그룹 추천 ========== */}
-        <section className="mb-6">
-          <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">5</span>
-            지원 가능 대학 그룹 추천
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {getUniversityRecommendations().map((rec, index) => (
-              <UniversityCard
-                key={index}
-                tier={rec.tier}
-                tierLabel={rec.tierLabel}
-                tierColor={rec.tierColor}
-                universities={rec.universities}
-              />
-            ))}
-          </div>
-          <p className="text-xs text-gray-500 mt-3 text-center">
-            * 대학 추천은 참고용이며, 실제 입시 결과와 다를 수 있습니다.
-          </p>
-        </section>
-
-        {/* ========== 6. 고급 통계 분석 ========== */}
+        {/* ========== 5. การวิเคราะห์สถิติขั้นสูง ========== */}
         {advancedStatistics && statistics && (
           <section className="bg-white rounded-xl p-6 card-shadow mb-8">
             <h2 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
-              <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">6</span>
-              고급 통계 분석
+              <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">5</span>
+              การวิเคราะห์สถิติขั้นสูง
             </h2>
 
             {/* KR-20 신뢰도 */}
@@ -1041,11 +914,11 @@ export default function AnalysisPage() {
           </section>
         )}
 
-        {/* ========== 7. 과목별 약점 분석 ========== */}
+        {/* ========== 6. การวิเคราะห์จุดอ่อนรายวิชา ========== */}
         <section className="bg-white rounded-xl p-6 card-shadow mb-8">
           <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">7</span>
-            과목별 약점 분석
+            <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs">6</span>
+            การวิเคราะห์จุดอ่อนรายวิชา
           </h2>
 
           {/* Category Performance Bars */}
@@ -1085,7 +958,7 @@ export default function AnalysisPage() {
                   ></div>
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
-                  평균 대비: {cat.difference > 0 ? '+' : ''}{cat.difference.toFixed(1)}%p
+                  เทียบกับค่าเฉลี่ย: {cat.difference > 0 ? '+' : ''}{cat.difference.toFixed(1)}%
                 </div>
               </div>
             ))}
@@ -1096,7 +969,7 @@ export default function AnalysisPage() {
             <div className="bg-red-50 rounded-lg p-4">
               <h3 className="text-sm font-medium text-red-900 mb-2 flex items-center gap-2">
                 <TrendingDown size={16} />
-                보완이 필요한 영역
+                ส่วนที่ต้องพัฒนา
               </h3>
               {weakPoints.length > 0 ? (
                 <ul className="text-sm text-red-800 space-y-1">
@@ -1105,14 +978,14 @@ export default function AnalysisPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-red-700">모든 영역에서 평균 이상의 성적을 보이고 있습니다.</p>
+                <p className="text-sm text-red-700">คุณมีผลงานสูงกว่าค่าเฉลี่ยในทุกด้าน</p>
               )}
             </div>
 
             <div className="bg-green-50 rounded-lg p-4">
               <h3 className="text-sm font-medium text-green-900 mb-2 flex items-center gap-2">
                 <TrendingUp size={16} />
-                강점 영역
+                จุดแข็ง
               </h3>
               {strongPoints.length > 0 ? (
                 <ul className="text-sm text-green-800 space-y-1">
@@ -1121,7 +994,7 @@ export default function AnalysisPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-green-700">특별히 두드러지는 강점 영역이 없습니다. 전반적인 실력 향상이 필요합니다.</p>
+                <p className="text-sm text-green-700">ไม่มีจุดแข็งที่โดดเด่นเป็นพิเศษ ต้องการพัฒนาทักษะโดยรวม</p>
               )}
             </div>
           </div>
@@ -1131,11 +1004,11 @@ export default function AnalysisPage() {
         <div className="flex gap-4 justify-center">
           <button className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors">
             <Download size={18} />
-            리포트 다운로드
+            ดาวน์โหลดรายงาน
           </button>
           <button className="flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">
             <Share2 size={18} />
-            결과 공유
+            แชร์ผลลัพธ์
           </button>
         </div>
       </div>
@@ -1144,7 +1017,7 @@ export default function AnalysisPage() {
       <footer className="bg-gray-900 text-white py-8 mt-12">
         <div className="max-w-6xl mx-auto px-4 text-center">
           <div className="text-xl font-bold mb-2">megastudy</div>
-          <p className="text-gray-400 text-sm">AI 기반 점수 분석 서비스</p>
+          <p className="text-gray-400 text-sm">บริการวิเคราะห์คะแนนด้วย AI</p>
           <p className="text-gray-500 text-xs mt-4">
             © 2024 Megastudy. All rights reserved.
           </p>
