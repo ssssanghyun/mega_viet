@@ -115,6 +115,11 @@ type UnitResult = {
 type QuestionStat = {
   correct: number;
   total: number;
+  pValue?: number; // 문항 난이도 (p-value)
+  dIndex?: number; // 변별도 (D-index)
+  topGroupRate?: number; // 상위 그룹 정답률
+  bottomGroupRate?: number; // 하위 그룹 정답률
+  gap?: number; // 상위-하위 그룹 Gap
 };
 
 type SubjectData = {
@@ -130,6 +135,7 @@ type SubjectData = {
   avgScore: number;
   stdDev: number;
   median: number;
+  kr20?: number; // KR-20 신뢰도
 };
 
 function normalizeText(value: string) {
@@ -349,7 +355,84 @@ function computeSubjectStats(subject: {
     student.standardScore = Math.round(standardScore);
   });
 
-  return { questionStats, unitStats, avgScore, stdDev, median };
+  // Calculate p-value (문항 난이도) for each question
+  questionStats.forEach((stat, qNum) => {
+    stat.pValue = stat.total > 0 ? stat.correct / stat.total : 0;
+  });
+
+  // Calculate D-index (변별도) and group comparisons
+  const sortedStudents = [...subject.students].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const topGroupSize = Math.max(1, Math.floor(sortedStudents.length * 0.27)); // 상위 27%
+  const bottomGroupSize = Math.max(1, Math.floor(sortedStudents.length * 0.27)); // 하위 27%
+  const topGroup = sortedStudents.slice(0, topGroupSize);
+  const bottomGroup = sortedStudents.slice(-bottomGroupSize);
+
+  questionStats.forEach((stat, qNum) => {
+    // Calculate top group correct rate
+    let topCorrect = 0;
+    topGroup.forEach((student) => {
+      const idx = subject.questionNumbers.indexOf(qNum);
+      if (idx !== -1) {
+        const correctAnswer = subject.answerMap.get(qNum) || 0;
+        const studentAnswer = student.answers[idx] || 0;
+        if (studentAnswer !== 0 && studentAnswer === correctAnswer) topCorrect += 1;
+      }
+    });
+    stat.topGroupRate = topGroupSize > 0 ? topCorrect / topGroupSize : 0;
+
+    // Calculate bottom group correct rate
+    let bottomCorrect = 0;
+    bottomGroup.forEach((student) => {
+      const idx = subject.questionNumbers.indexOf(qNum);
+      if (idx !== -1) {
+        const correctAnswer = subject.answerMap.get(qNum) || 0;
+        const studentAnswer = student.answers[idx] || 0;
+        if (studentAnswer !== 0 && studentAnswer === correctAnswer) bottomCorrect += 1;
+      }
+    });
+    stat.bottomGroupRate = bottomGroupSize > 0 ? bottomCorrect / bottomGroupSize : 0;
+
+    // Calculate gap and D-index
+    stat.gap = (stat.topGroupRate || 0) - (stat.bottomGroupRate || 0);
+    stat.dIndex = stat.gap; // D-index = gap between top and bottom groups
+  });
+
+  // Calculate KR-20 (신뢰도)
+  const kr20 = calculateKR20(subject.students, subject.questionNumbers, questionStats, subject.answerMap);
+
+  return { questionStats, unitStats, avgScore, stdDev, median, kr20 };
+}
+
+function calculateKR20(
+  students: StudentRecord[],
+  questionNumbers: number[],
+  questionStats: Map<number, QuestionStat>,
+  answerMap: Map<number, number>
+): number {
+  if (students.length === 0 || questionNumbers.length === 0) return 0;
+
+  // Calculate variance of total scores
+  const scores = students.map((s) => s.score || 0);
+  const meanScore = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+  const varianceTotal = scores.reduce((sum, s) => sum + Math.pow(s - meanScore, 2), 0) / scores.length;
+
+  // Calculate sum of p*q for each question (p = correct rate, q = 1-p)
+  let sumPQ = 0;
+  questionNumbers.forEach((qNum) => {
+    const stat = questionStats.get(qNum);
+    if (stat && stat.total > 0) {
+      const p = stat.pValue || 0;
+      const q = 1 - p;
+      sumPQ += p * q;
+    }
+  });
+
+  // KR-20 formula: (k/(k-1)) * (1 - sum(pq)/variance)
+  const k = questionNumbers.length;
+  if (k <= 1 || varianceTotal === 0) return 0;
+
+  const kr20 = (k / (k - 1)) * (1 - sumPQ / varianceTotal);
+  return Math.max(0, Math.min(1, kr20)); // Clamp between 0 and 1
 }
 
 function sanitizeFilename(value: string) {
@@ -425,11 +508,14 @@ function addSubjectSection(
 
   const cardWidth = (contentWidth - 15) / 4;
   const cardHeight = 24;
+  const correctRate = subject.questionNumbers.length > 0 
+    ? ((student.correctCount ?? 0) / subject.questionNumbers.length * 100).toFixed(1) 
+    : '0.0';
   const cards = [
+    { label: 'Total Score', value: `${student.correctCount ?? 0}/${subject.questionNumbers.length}` },
+    { label: 'Correct Rate', value: `${correctRate}%` },
+    { label: 'Percentile', value: `${100 - (student.topPercent ?? 100)}th` },
     { label: 'Standard Score', value: `${student.standardScore ?? 0}` },
-    { label: 'Top %', value: `Top ${student.topPercent ?? 100}%` },
-    { label: 'Estimated Rank', value: `${student.nationalRank ?? 0}` },
-    { label: 'Total Participants', value: `${TOTAL_PARTICIPANTS}` },
   ];
 
   cards.forEach((card, i) => {
@@ -551,24 +637,93 @@ function addSubjectSection(
     yPos = 58;
   }
 
+  // Add difficulty level performance chart
+  yPos = drawDifficultyPerformanceChart(doc, subject, student, yPos);
+
+  if (yPos > pageHeight - 80) {
+    doc.addPage();
+    addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+    yPos = 58;
+  }
+
+  // Add top-bottom comparison chart
+  yPos = drawTopBottomComparisonChart(doc, subject, yPos);
+
+  if (yPos > pageHeight - 80) {
+    doc.addPage();
+    addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+    yPos = 58;
+  }
+
+  // Add difficulty-discrimination scatter plot
+  yPos = drawDifficultyDiscriminationScatter(doc, subject, yPos);
+
+  if (yPos > pageHeight - 80) {
+    doc.addPage();
+    addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+    yPos = 58;
+  }
+
+  // Add test reliability and statistics section
+  const thaiReady = registerThaiFont(doc);
+  doc.setFillColor(59, 130, 246);
+  doc.rect(margin, yPos, 3, 12, 'F');
+  doc.setFontSize(11);
+  doc.setTextColor(59, 130, 246);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Test Statistics & Reliability', margin + 8, yPos + 9);
+
+  yPos += 18;
+  doc.setFontSize(9);
+  doc.setTextColor(60, 60, 60);
+  doc.setFont('helvetica', 'normal');
+
+  const kr20 = subject.kr20 ?? 0;
+  const kr20Quality = kr20 >= 0.8 ? 'Excellent' : kr20 >= 0.7 ? 'Good' : kr20 >= 0.6 ? 'Acceptable' : 'Needs Improvement';
+  
+  doc.text(`KR-20 Reliability: ${kr20.toFixed(3)} (${kr20Quality})`, margin, yPos);
+  yPos += 8;
+  doc.text(`Interpretation: ${kr20 >= 0.8 ? 'Very reliable test' : kr20 >= 0.7 ? 'Reliable test' : kr20 >= 0.6 ? 'Moderately reliable' : 'Low reliability - test quality needs improvement'}`, margin, yPos);
+  yPos += 12;
+
+  // Question statistics summary
+  const totalQuestions = subject.questionNumbers.length;
+  const goodDiscrimination = Array.from(questionStats.values()).filter(s => (s.dIndex ?? 0) >= 0.3).length;
+  const moderateDiscrimination = Array.from(questionStats.values()).filter(s => (s.dIndex ?? 0) >= 0.1 && (s.dIndex ?? 0) < 0.3).length;
+  const poorDiscrimination = Array.from(questionStats.values()).filter(s => (s.dIndex ?? 0) < 0.1).length;
+
+  doc.text(`Question Quality: Good (D≥0.3): ${goodDiscrimination}, Moderate (0.1≤D<0.3): ${moderateDiscrimination}, Poor (D<0.1): ${poorDiscrimination}`, margin, yPos);
+  yPos += 8;
+
+  const easyQuestions = Array.from(questionStats.values()).filter(s => (s.pValue ?? 0) >= 0.7).length;
+  const mediumQuestions = Array.from(questionStats.values()).filter(s => (s.pValue ?? 0) > 0.3 && (s.pValue ?? 0) < 0.7).length;
+  const hardQuestions = Array.from(questionStats.values()).filter(s => (s.pValue ?? 0) <= 0.3).length;
+
+  doc.text(`Difficulty Distribution: Easy (p≥0.7): ${easyQuestions}, Medium (0.3<p<0.7): ${mediumQuestions}, Hard (p≤0.3): ${hardQuestions}`, margin, yPos);
+  yPos += 15;
+
   const questionTable = subject.questionNumbers.map((qNum) => {
     const stat = questionStats.get(qNum);
     const rate = stat && stat.total ? ((stat.correct / stat.total) * 100).toFixed(1) : '0.0';
-    return [qNum, `${stat?.correct ?? 0}/${stat?.total ?? 0}`, `${rate}%`, subject.unitMap.get(qNum) || `Question ${qNum}`];
+    const pValue = stat?.pValue !== undefined ? stat.pValue.toFixed(2) : '-';
+    const dIndex = stat?.dIndex !== undefined ? stat.dIndex.toFixed(2) : '-';
+    return [qNum, `${stat?.correct ?? 0}/${stat?.total ?? 0}`, `${rate}%`, pValue, dIndex, subject.unitMap.get(qNum) || `Question ${qNum}`];
   });
 
   autoTable(doc, {
     startY: yPos,
-    head: [['Q', 'Correct/Total', 'Rate', 'Unit']],
+    head: [['Q', 'Correct/Total', 'Rate', 'p-value', 'D-index', 'Unit']],
     body: questionTable,
     theme: 'grid',
-    styles: { fontSize: 7, cellPadding: 2 },
+    styles: { fontSize: 6, cellPadding: 1.5 },
     headStyles: { fillColor: [30, 64, 175], textColor: 255 },
     columnStyles: {
-      0: { cellWidth: contentWidth * 0.08 },
-      1: { cellWidth: contentWidth * 0.2 },
-      2: { cellWidth: contentWidth * 0.12 },
-      3: { cellWidth: contentWidth * 0.6 },
+      0: { cellWidth: contentWidth * 0.05 },
+      1: { cellWidth: contentWidth * 0.12 },
+      2: { cellWidth: contentWidth * 0.08 },
+      3: { cellWidth: contentWidth * 0.08 },
+      4: { cellWidth: contentWidth * 0.08 },
+      5: { cellWidth: contentWidth * 0.59 },
     },
     margin: { left: margin, right: margin },
   });
@@ -630,7 +785,22 @@ function drawStudentScatter(doc: jsPDF, subject: SubjectData, student: StudentRe
   doc.text(`Est. Rank: ${student.nationalRank ?? 0}`, chartLeft, statsY + 10);
   doc.text(`Total: ${TOTAL_PARTICIPANTS}`, chartLeft + 90, statsY + 10);
 
-  return statsY + 18;
+  // Add interpretation
+  const thaiReady = registerThaiFont(doc);
+  let interpretY = statsY + 20;
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont(thaiReady ? THAI_FONT_NAME : 'helvetica', 'normal');
+  const interpretation = `• กราฟนี้แสดงการกระจายคะแนนของนักเรียนทั้งหมดในกลุ่ม โดยจุดสีแดงคือตำแหน่งของคุณ
+• หากจุดของคุณอยู่ด้านซ้ายล่าง หมายความว่าคะแนนต่ำกว่าเพื่อน แต่ถ้าอยู่ด้านขวาบน หมายความว่าคะแนนสูงกว่า
+• กราฟนี้ช่วยให้เห็นว่าคุณอยู่ในตำแหน่งไหนเมื่อเทียบกับนักเรียนคนอื่นในกลุ่มเดียวกัน`;
+  const interpretLines = doc.splitTextToSize(interpretation, contentWidth - 10);
+  interpretLines.forEach((line: string) => {
+    doc.text(line, margin + 5, interpretY);
+    interpretY += 5;
+  });
+
+  return interpretY + 5;
 }
 
 function buildThaiInterpretation(subject: SubjectData, student: StudentRecord) {
@@ -757,7 +927,402 @@ function drawQuestionRateChart(doc: jsPDF, subject: SubjectData, startY: number)
     doc.text(String(qNum), x, chartTop + maxHeight + 6);
   });
 
-  return chartTop + maxHeight + 12;
+  // Add interpretation
+  const thaiReady = registerThaiFont(doc);
+  let interpretY = chartTop + maxHeight + 15;
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont(thaiReady ? THAI_FONT_NAME : 'helvetica', 'normal');
+  const interpretation = `• กราฟนี้แสดงอัตราการตอบถูกของแต่ละข้อในกลุ่มนักเรียนทั้งหมด
+• แถบที่สูงแสดงว่าข้อนั้นมีนักเรียนตอบถูกมาก (ข้อง่าย) แถบที่ต่ำแสดงว่ามีนักเรียนตอบถูกน้อย (ข้อยาก)
+• กราฟนี้ช่วยให้เห็นว่าข้อไหนเป็นข้อที่ควรฝึกเพิ่ม โดยเฉพาะข้อที่แถบต่ำมาก (ยาก) ที่คุณตอบผิด`;
+  const interpretLines = doc.splitTextToSize(interpretation, contentWidth - 10);
+  interpretLines.forEach((line: string) => {
+    doc.text(line, margin + 5, interpretY);
+    interpretY += 5;
+  });
+
+  return interpretY + 5;
+}
+
+function drawDifficultyDiscriminationScatter(
+  doc: jsPDF,
+  subject: SubjectData,
+  startY: number
+) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 15;
+  const contentWidth = pageWidth - margin * 2;
+  const chartHeight = 80;
+  const chartWidth = contentWidth;
+  const yPos = startY;
+
+  doc.setFillColor(59, 130, 246);
+  doc.rect(margin, yPos, 3, 12, 'F');
+  doc.setFontSize(11);
+  doc.setTextColor(59, 130, 246);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Difficulty-Discrimination Scatter (p-value vs D-index)', margin + 8, yPos + 9);
+
+  const chartTop = yPos + 18;
+  const chartLeft = margin + 30;
+  const chartBottom = chartTop + chartHeight;
+  const chartRight = chartLeft + chartWidth - 60;
+
+  // Calculate D-index range to handle negative values
+  const dIndexValues = Array.from(subject.questionStats.values())
+    .map(s => s.dIndex ?? 0)
+    .filter(d => d !== undefined);
+  const minDIndex = Math.min(...dIndexValues, 0);
+  const maxDIndex = Math.max(...dIndexValues, 1);
+  const dIndexRange = maxDIndex - minDIndex;
+  const dIndexOffset = Math.abs(minDIndex); // Offset to handle negative values
+
+  // Draw chart border
+  doc.setDrawColor(229, 231, 235);
+  doc.rect(chartLeft, chartTop, chartWidth - 60, chartHeight);
+
+  // Draw axes
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.5);
+  doc.line(chartLeft, chartBottom, chartRight, chartBottom); // X-axis
+  doc.line(chartLeft, chartTop, chartLeft, chartBottom); // Y-axis
+
+  // Draw zero line for D-index if there are negative values
+  if (minDIndex < 0) {
+    const zeroY = chartBottom - (dIndexOffset / dIndexRange) * chartHeight;
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.4);
+    doc.line(chartLeft, zeroY, chartRight, zeroY);
+    doc.setFontSize(6);
+    doc.setTextColor(100, 100, 100);
+    doc.text('D=0', chartLeft - 8, zeroY, { align: 'right' });
+  }
+
+  // Draw labels
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  doc.text('p-value (Difficulty)', chartLeft + (chartWidth - 60) / 2, chartBottom + 10, { align: 'center' });
+  doc.text('D-index (Discrimination)', chartLeft - 25, chartTop + chartHeight / 2, { align: 'center', angle: 90 });
+
+  // Draw grid lines and labels for X-axis (p-value)
+  for (let i = 0; i <= 10; i++) {
+    const x = chartLeft + (i / 10) * (chartWidth - 60);
+    doc.setDrawColor(240, 240, 240);
+    doc.setLineWidth(0.2);
+    doc.line(x, chartTop, x, chartBottom);
+    if (i % 2 === 0) {
+      doc.setFontSize(6);
+      doc.setTextColor(100, 100, 100);
+      doc.text((i / 10).toFixed(1), x, chartBottom + 6, { align: 'center' });
+    }
+  }
+
+  // Draw grid lines and labels for Y-axis (D-index) with negative support
+  const yAxisSteps = 8;
+  for (let i = 0; i <= yAxisSteps; i++) {
+    const dValue = minDIndex + (i / yAxisSteps) * dIndexRange;
+    const y = chartBottom - ((dValue - minDIndex) / dIndexRange) * chartHeight;
+    doc.setDrawColor(240, 240, 240);
+    doc.setLineWidth(0.2);
+    doc.line(chartLeft, y, chartRight, y);
+    if (i % 2 === 0 || Math.abs(dValue) < 0.05) {
+      doc.setFontSize(6);
+      doc.setTextColor(100, 100, 100);
+      doc.text(dValue.toFixed(2), chartLeft - 5, y, { align: 'right' });
+    }
+  }
+
+  // Draw reference lines
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  // p-value = 0.3 (difficulty threshold)
+  const p30X = chartLeft + 0.3 * (chartWidth - 60);
+  doc.line(p30X, chartTop, p30X, chartBottom);
+  // p-value = 0.7 (difficulty threshold)
+  const p70X = chartLeft + 0.7 * (chartWidth - 60);
+  doc.line(p70X, chartTop, p70X, chartBottom);
+  // D-index = 0.3 (good discrimination)
+  const d30Y = chartBottom - ((0.3 - minDIndex) / dIndexRange) * chartHeight;
+  if (d30Y >= chartTop && d30Y <= chartBottom) {
+    doc.line(chartLeft, d30Y, chartRight, d30Y);
+  }
+
+  // Plot questions
+  subject.questionNumbers.forEach((qNum) => {
+    const stat = subject.questionStats.get(qNum);
+    if (!stat || stat.pValue === undefined || stat.dIndex === undefined) return;
+
+    const x = chartLeft + stat.pValue * (chartWidth - 60);
+    const y = chartBottom - ((stat.dIndex - minDIndex) / dIndexRange) * chartHeight;
+
+    // Color code by quality (including negative values)
+    if (stat.dIndex >= 0.3) {
+      doc.setFillColor(34, 197, 94); // Green for good discrimination
+    } else if (stat.dIndex >= 0.1) {
+      doc.setFillColor(251, 191, 36); // Yellow for moderate
+    } else if (stat.dIndex >= 0) {
+      doc.setFillColor(239, 68, 68); // Red for poor discrimination (positive but low)
+    } else {
+      doc.setFillColor(168, 85, 247); // Purple for negative discrimination (problematic question)
+    }
+    doc.circle(x, y, 1.2, 'F');
+  });
+
+  // Legend
+  const legendY = chartTop - 10;
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Good (D≥0.3)', chartRight + 5, legendY);
+  doc.setFillColor(34, 197, 94);
+  doc.circle(chartRight + 25, legendY - 1.5, 1.2, 'F');
+  doc.setTextColor(100, 100, 100);
+  doc.text('Mod (0.1≤D<0.3)', chartRight + 5, legendY + 6);
+  doc.setFillColor(251, 191, 36);
+  doc.circle(chartRight + 40, legendY + 4.5, 1.2, 'F');
+  doc.setTextColor(100, 100, 100);
+  doc.text('Poor (0≤D<0.1)', chartRight + 5, legendY + 12);
+  doc.setFillColor(239, 68, 68);
+  doc.circle(chartRight + 35, legendY + 10.5, 1.2, 'F');
+  if (minDIndex < 0) {
+    doc.setTextColor(100, 100, 100);
+    doc.text('Neg (D<0)', chartRight + 5, legendY + 18);
+    doc.setFillColor(168, 85, 247);
+    doc.circle(chartRight + 25, legendY + 16.5, 1.2, 'F');
+  }
+
+  // Add interpretation
+  const thaiReady = registerThaiFont(doc);
+  let interpretY = chartBottom + (minDIndex < 0 ? 28 : 20) + 5;
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont(thaiReady ? THAI_FONT_NAME : 'helvetica', 'normal');
+  
+  const goodCount = Array.from(subject.questionStats.values()).filter(s => (s.dIndex ?? 0) >= 0.3).length;
+  const mediumCount = Array.from(subject.questionStats.values()).filter(s => (s.dIndex ?? 0) >= 0.1 && (s.dIndex ?? 0) < 0.3).length;
+  const poorCount = Array.from(subject.questionStats.values()).filter(s => (s.dIndex ?? 0) >= 0 && (s.dIndex ?? 0) < 0.1).length;
+  const negativeCount = Array.from(subject.questionStats.values()).filter(s => (s.dIndex ?? 0) < 0).length;
+  
+  let interpretation = `• กราฟนี้แสดงความสัมพันธ์ระหว่างความยากของข้อสอบ (p-value, แกน X) กับความสามารถในการแยกความสามารถ (D-index, แกน Y)`;
+  interpretation += `\n• จุดเขียว (มุมขวาบน): ข้อสอบดี - ยากแต่แยกความสามารถได้ดี (${goodCount} ข้อ)`;
+  interpretation += `\n• จุดเหลือง: ข้อสอบพอใช้ (${mediumCount} ข้อ)`;
+  interpretation += `\n• จุดแดง (มุมซ้ายล่าง): ข้อสอบไม่ดี - ยากแต่ไม่แยกความสามารถ (${poorCount} ข้อ)`;
+  if (negativeCount > 0) {
+    interpretation += `\n• จุดม่วง (ใต้เส้น D=0): ข้อสอบมีปัญหา - นักเรียนอ่อนทำถูกมากกว่านักเรียนเก่ง (${negativeCount} ข้อ)`;
+  }
+  interpretation += `\n• สำหรับนักเรียน: ควรฝึกข้อที่อยู่มุมขวาบน (เขียว) ที่คุณทำผิด เพราะเป็นข้อที่นักเรียนเก่งส่วนใหญ่ทำถูก`;
+  
+  const interpretLines = doc.splitTextToSize(interpretation, pageWidth - margin * 2 - 10);
+  interpretLines.forEach((line: string) => {
+    doc.text(line, margin + 5, interpretY);
+    interpretY += 5;
+  });
+
+  return interpretY + 5;
+}
+
+function drawTopBottomComparisonChart(
+  doc: jsPDF,
+  subject: SubjectData,
+  startY: number
+) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 15;
+  const contentWidth = pageWidth - margin * 2;
+  const chartHeight = 60;
+  const yPos = startY;
+
+  doc.setFillColor(59, 130, 246);
+  doc.rect(margin, yPos, 3, 12, 'F');
+  doc.setFontSize(11);
+  doc.setTextColor(59, 130, 246);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Top-Bottom Group Comparison (D-index)', margin + 8, yPos + 9);
+
+  const chartTop = yPos + 18;
+  const chartLeft = margin;
+  const chartWidth = contentWidth;
+  const chartBottom = chartTop + chartHeight;
+  const barWidth = Math.min(8, (chartWidth - 40) / subject.totalQuestions);
+
+  // Draw chart border
+  doc.setDrawColor(229, 231, 235);
+  doc.rect(chartLeft, chartTop, chartWidth, chartHeight);
+
+  // Calculate D-index range for proper scaling
+  const dIndexValues = Array.from(subject.questionStats.values())
+    .map(s => s.dIndex ?? 0)
+    .filter(d => d !== undefined);
+  const minDIndex = Math.min(...dIndexValues, 0);
+  const maxDIndex = Math.max(...dIndexValues, 1);
+  const dIndexRange = maxDIndex - minDIndex;
+  const zeroY = minDIndex < 0 ? chartBottom - 5 - (Math.abs(minDIndex) / dIndexRange) * (chartHeight - 10) : chartBottom - 5;
+
+  // Draw zero line if there are negative values
+  if (minDIndex < 0) {
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.4);
+    doc.line(chartLeft + 20, zeroY, chartLeft + chartWidth, zeroY);
+    doc.setFontSize(6);
+    doc.setTextColor(100, 100, 100);
+    doc.text('D=0', chartLeft + 18, zeroY - 2, { align: 'right' });
+  }
+
+  // Draw bars
+  subject.questionNumbers.forEach((qNum, idx) => {
+    const stat = subject.questionStats.get(qNum);
+    if (!stat || stat.dIndex === undefined) return;
+
+    const x = chartLeft + 20 + idx * barWidth;
+    const barHeight = (Math.abs(stat.dIndex) / dIndexRange) * (chartHeight - 10);
+    
+    let y: number;
+    if (stat.dIndex >= 0) {
+      y = zeroY - barHeight; // Bars go up from zero line
+    } else {
+      y = zeroY; // Bars go down from zero line
+    }
+
+    // Color by D-index value
+    if (stat.dIndex >= 0.3) {
+      doc.setFillColor(34, 197, 94); // Green
+    } else if (stat.dIndex >= 0.1) {
+      doc.setFillColor(251, 191, 36); // Yellow
+    } else if (stat.dIndex >= 0) {
+      doc.setFillColor(239, 68, 68); // Red
+    } else {
+      doc.setFillColor(168, 85, 247); // Purple for negative
+    }
+    doc.rect(x, y, barWidth - 1, barHeight, 'F');
+  });
+
+  // Draw reference line at D=0.3
+  doc.setDrawColor(100, 100, 100);
+  doc.setLineWidth(0.3);
+  const refY = chartBottom - 5 - 0.3 * (chartHeight - 10);
+  doc.line(chartLeft + 20, refY, chartLeft + chartWidth, refY);
+  doc.setFontSize(6);
+  doc.setTextColor(100, 100, 100);
+  doc.text('D=0.3', chartLeft + 22, refY - 2);
+
+  // Labels
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  doc.text('D-index', chartLeft, chartTop - 4);
+  doc.text('Questions', chartLeft + chartWidth / 2, chartBottom + 10, { align: 'center' });
+
+  // Add interpretation
+  const thaiReady = registerThaiFont(doc);
+  let interpretY = chartBottom + 20;
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont(thaiReady ? THAI_FONT_NAME : 'helvetica', 'normal');
+  const goodCount = Array.from(subject.questionStats.values()).filter(s => (s.dIndex ?? 0) >= 0.3).length;
+  const poorCount = Array.from(subject.questionStats.values()).filter(s => (s.dIndex ?? 0) < 0.1).length;
+  const negativeCount = Array.from(subject.questionStats.values()).filter(s => (s.dIndex ?? 0) < 0).length;
+  
+  let interpretation = `• D-index (변별도) แสดงว่าข้อสอบแต่ละข้อสามารถแยกความสามารถของนักเรียนได้ดีแค่ไหน`;
+  interpretation += `\n• แถบเขียว (D≥0.3): ข้อสอบดีมาก สามารถแยกนักเรียนเก่ง-อ่อนได้ชัดเจน (${goodCount} ข้อ)`;
+  interpretation += `\n• แถบเหลือง (0.1≤D<0.3): ข้อสอบพอใช้ มีการแยกความสามารถบ้าง`;
+  interpretation += `\n• แถบแดง (0≤D<0.1): ข้อสอบไม่ดี ควรปรับปรุง (${poorCount} ข้อ)`;
+  if (negativeCount > 0) {
+    interpretation += `\n• แถบม่วง (D<0): ข้อสอบมีปัญหา นักเรียนอ่อนตอบถูกมากกว่านักเรียนเก่ง (${negativeCount} ข้อ) - ควรแก้ไขข้อสอบ`;
+  }
+  interpretation += `\n• สำหรับนักเรียน: ข้อที่มี D-index สูง (เขียว) คือข้อที่นักเรียนเก่งทำถูก แต่คุณทำผิด ควรฝึกเพิ่ม`;
+  
+  const interpretLines = doc.splitTextToSize(interpretation, contentWidth - 10);
+  interpretLines.forEach((line: string) => {
+    doc.text(line, margin + 5, interpretY);
+    interpretY += 5;
+  });
+
+  return interpretY + 5;
+}
+
+function drawDifficultyPerformanceChart(
+  doc: jsPDF,
+  subject: SubjectData,
+  student: StudentRecord,
+  startY: number
+) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 15;
+  const contentWidth = pageWidth - margin * 2;
+  const chartHeight = 60;
+  const yPos = startY;
+
+  doc.setFillColor(59, 130, 246);
+  doc.rect(margin, yPos, 3, 12, 'F');
+  doc.setFontSize(11);
+  doc.setTextColor(59, 130, 246);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Difficulty Level Performance', margin + 8, yPos + 9);
+
+  const difficulty = computeDifficultyPerformance(subject, student);
+  const chartTop = yPos + 18;
+  const chartLeft = margin;
+  const chartWidth = contentWidth;
+  const chartBottom = chartTop + chartHeight;
+  const barWidth = (chartWidth - 40) / 3;
+
+  // Draw bars for easy, medium, hard
+  const levels = [
+    { key: 'easy', label: 'Easy (p≥0.7)', data: difficulty.easy, color: [34, 197, 94] },
+    { key: 'medium', label: 'Medium (0.3<p<0.7)', data: difficulty.medium, color: [251, 191, 36] },
+    { key: 'hard', label: 'Hard (p≤0.3)', data: difficulty.hard, color: [239, 68, 68] },
+  ];
+
+  levels.forEach((level, i) => {
+    const x = chartLeft + 20 + i * (barWidth + 10);
+    const rate = level.data.total > 0 ? level.data.correct / level.data.total : 0;
+    const barHeight = rate * (chartHeight - 20);
+    const y = chartBottom - 10 - barHeight;
+
+    doc.setFillColor(level.color[0], level.color[1], level.color[2]);
+    doc.rect(x, y, barWidth, barHeight, 'F');
+
+    // Label
+    doc.setFontSize(7);
+    doc.setTextColor(60, 60, 60);
+    doc.text(level.label, x + barWidth / 2, chartBottom + 8, { align: 'center' });
+    doc.text(`${level.data.correct}/${level.data.total}`, x + barWidth / 2, chartBottom + 15, { align: 'center' });
+    doc.text(`${(rate * 100).toFixed(0)}%`, x + barWidth / 2, y - 3, { align: 'center' });
+  });
+
+  // Y-axis label
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Correct Rate', chartLeft, chartTop + chartHeight / 2, { align: 'center', angle: 90 });
+
+  // Add interpretation
+  const thaiReady = registerThaiFont(doc);
+  let interpretY = chartBottom + 25;
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont(thaiReady ? THAI_FONT_NAME : 'helvetica', 'normal');
+  const easyRate = difficulty.easy.total > 0 ? ((difficulty.easy.correct / difficulty.easy.total) * 100).toFixed(0) : 0;
+  const mediumRate = difficulty.medium.total > 0 ? ((difficulty.medium.correct / difficulty.medium.total) * 100).toFixed(0) : 0;
+  const hardRate = difficulty.hard.total > 0 ? ((difficulty.hard.correct / difficulty.hard.total) * 100).toFixed(0) : 0;
+  
+  let interpretation = `• กราฟนี้แสดงผลการทำข้อสอบตามระดับความยาก: ข้อง่าย (p≥0.7), ข้อกลาง (0.3<p<0.7), ข้อยาก (p≤0.3)`;
+  interpretation += `\n• คุณทำข้อง่ายได้ ${easyRate}%, ข้อกลางได้ ${mediumRate}%, ข้อยากได้ ${hardRate}%`;
+  
+  if (parseFloat(easyRate) < 80) {
+    interpretation += `\n• ⚠️ คุณทำข้อง่ายได้น้อย แสดงว่าอาจมีปัญหาพื้นฐาน ควรทบทวนเนื้อหาพื้นฐานก่อน`;
+  }
+  if (parseFloat(hardRate) > 50) {
+    interpretation += `\n• ✅ คุณทำข้อยากได้ดี แสดงว่ามีความเข้าใจในเนื้อหาลึกซึ้ง มีศักยภาพในการเรียนขั้นสูง`;
+  } else if (parseFloat(hardRate) < 30) {
+    interpretation += `\n• 💡 คุณทำข้อยากได้น้อย ควรฝึกโจทย์ที่ซับซ้อนมากขึ้นเพื่อพัฒนาความสามารถ`;
+  }
+  
+  const interpretLines = doc.splitTextToSize(interpretation, contentWidth - 10);
+  interpretLines.forEach((line: string) => {
+    doc.text(line, margin + 5, interpretY);
+    interpretY += 5;
+  });
+
+  return interpretY + 5;
 }
 
 async function generateAISummary(
@@ -789,47 +1354,117 @@ async function generateAISummary(
         )
         .slice(0, 8);
 
+      const difficulty = computeDifficultyPerformance(subject, studentData);
+      const percentile = 100 - (studentData?.topPercent ?? 100);
+
       return {
         name: subject.name,
         totalQuestions: subject.totalQuestions,
         correct: studentData?.correctCount ?? 0,
         score: Number((studentData?.score ?? 0).toFixed(1)),
         avgScore: Number(subject.avgScore.toFixed(1)),
+        percentile: percentile,
+        standardScore: studentData?.standardScore ?? 0,
         weakestUnits: weakest.map((entry) => `${entry.unit} (${entry.correct}/${entry.total}, ${entry.rate.toFixed(0)}%)`),
         strongestUnits: strongest.map((entry) => `${entry.unit} (${entry.correct}/${entry.total}, ${entry.rate.toFixed(0)}%)`),
-        incorrectQuestions: incorrectQuestions.map((item) => `Q${item.q} ${item.unit} (cohort ${item.cohortRate}%)`),
+        incorrectQuestions: incorrectQuestions.map((item) => {
+          const stat = subject.questionStats.get(item.q);
+          const pValue = stat?.pValue !== undefined ? stat.pValue.toFixed(2) : '-';
+          return `Q${item.q} ${item.unit} (p=${pValue}, cohort ${item.cohortRate}%)`;
+        }),
+        difficultyPerformance: {
+          easy: `${difficulty.easy.correct}/${difficulty.easy.total} (${difficulty.easy.total > 0 ? ((difficulty.easy.correct / difficulty.easy.total) * 100).toFixed(0) : 0}%)`,
+          medium: `${difficulty.medium.correct}/${difficulty.medium.total} (${difficulty.medium.total > 0 ? ((difficulty.medium.correct / difficulty.medium.total) * 100).toFixed(0) : 0}%)`,
+          hard: `${difficulty.hard.correct}/${difficulty.hard.total} (${difficulty.hard.total > 0 ? ((difficulty.hard.correct / difficulty.hard.total) * 100).toFixed(0) : 0}%)`,
+        },
+        kr20: subject.kr20 ?? 0,
       };
     });
 
-    const prompt = `เขียนสรุปผล OMR ของนักเรียนจากข้อมูลด้านล่าง โดยสรุปแยกตามวิชา
+    const prompt = `คุณเป็นผู้เชี่ยวชาญด้านการศึกษาที่วิเคราะห์ผลการสอบให้กับนักเรียนและให้คำแนะนำการเรียนที่เฉพาะเจาะจง
 
-ข้อกำหนด:
-- เขียนเป็นภาษาไทย
-- วิชาละ 3-4 ประโยค
-- ต้องระบุ: คะแนนรวม (ถูก/จำนวนข้อ), เทียบค่าเฉลี่ยของวิชา, หน่วยที่ทำได้ดี 1-2 หน่วย, หน่วยที่ควรปรับปรุง 1-2 หน่วย, ข้อที่ผิดเด่น ๆ
-- จุดแข็ง/จุดอ่อนต้องอ้างอิงจากสัดส่วนถูก/ทั้งหมดของหน่วยนั้นจริง
-- ขึ้นหัวข้อแต่ละวิชาด้วยรูปแบบ [ชื่อวิชา] เช่น [MATH 1]
+เขียนรายงานวิเคราะห์ผลสอบ OMR ของนักเรียนโดยแยกตามวิชา โดยใช้ข้อมูลทางสถิติที่ให้มา
+
+ข้อกำหนดสำคัญ:
+1. เขียนเป็นภาษาไทยที่เข้าใจง่ายและเป็นธรรมชาติ
+2. แต่ละวิชาเขียนอย่างละเอียดและครอบคลุม อย่างน้อย 20-30 ประโยค (반 페이지 이상)
+3. ขึ้นหัวข้อแต่ละวิชาด้วยรูปแบบ [ชื่อวิชา]
+4. ใช้ข้อมูลที่ให้มาทั้งหมดในการวิเคราะห์
+5. ให้คำแนะนำที่ปฏิบัติได้จริงและเฉพาะเจาะจง
+6. ขยายรายละเอียดให้ครบถ้วน อย่าสรุปสั้นเกินไป
+
+สำหรับแต่ละวิชา ต้องเขียนให้ละเอียดและครอบคลุมทุกส่วนนี้อย่างเต็มที่:
+
+**1. สรุปผลการสอบและตำแหน่ง (Positioning)** - 4-6 ประโยค
+- เริ่มด้วยการบอกคะแนนรวม (ถูก/จำนวนข้อ) และคะแนนร้อยละ พร้อมอธิบายว่าเป็นผลอย่างไร
+- บอกเปอร์เซ็นไทล์ (Percentile) อย่างละเอียด และเปรียบเทียบกับค่าเฉลี่ยวิชา (บอกว่าสูงกว่าหรือต่ำกว่าเท่าไหร่ และหมายความว่าอย่างไร)
+- บอก Standard Score และแปลความหมายอย่างละเอียด (เช่น Standard Score 59 หมายความว่าอยู่ใกล้กับค่าเฉลี่ย และบอกผลกระทบ)
+- บอกว่าอยู่ในตำแหน่งไหนเมื่อเทียบกับนักเรียนคนอื่นอย่างละเอียด (เช่น อยู่ในกลุ่มบน X% หรืออยู่ในช่วง Xth percentile และนี่หมายความว่าอย่างไร)
+- อธิบายความหมายของตำแหน่งนี้ในแง่ของการแข่งขันและโอกาส (เช่น การเข้าสถานศึกษา หรือการประเมินความสามารถ)
+
+**2. การวิเคราะห์จุดแข็ง (Strengths)** - 5-7 ประโยค
+- บอกหน่วยที่ทำได้ดี 1-3 หน่วย พร้อมอธิบายอย่างละเอียดว่าทำได้ดีแค่ไหน (เช่น 100% ถูก หรือสูงกว่าค่าเฉลี่ยมาก) และทำไมถึงทำได้ดี
+- อธิบายความสำคัญของหน่วยที่ทำได้ดีเหล่านี้ (เช่น เป็นพื้นฐานสำคัญ หรือเป็นเนื้อหายาก)
+- บอกความสามารถในการทำข้อสอบยาก/ง่าย โดยอ้างอิงข้อมูล difficulty performance อย่างละเอียด (เช่น "ทำข้อง่ายได้ดีมาก แต่ข้อยากยังต้องปรับปรุง" พร้อมอธิบายว่าทำไม)
+- วิเคราะห์จุดแข็งในแง่ของการเรียนรู้ (เช่น มีพื้นฐานดีในส่วนไหน หรือมีความเข้าใจในแนวคิดใด)
+- เสนอแนะว่าจะใช้จุดแข็งเหล่านี้เพื่อพัฒนาจุดอ่อนได้อย่างไร
+
+**3. การวิเคราะห์จุดอ่อน (Weaknesses)** - 6-8 ประโยค
+- บอกหน่วยที่ควรปรับปรุง 2-3 หน่วย พร้อมอธิบายปัญหาที่พบอย่างละเอียด (เช่น ผิดทุกข้อ หรือได้น้อยมาก) และวิเคราะห์สาเหตุ
+- วิเคราะห์ว่าข้อที่ผิดเป็นข้อแบบไหน (ง่าย/กลาง/ยาก) โดยอ้างอิง p-value เพื่อให้เห็นชัดว่าขาดพื้นฐานหรือไม่ (เช่น "ผิดข้อง่ายมาก แสดงว่าพื้นฐานไม่แน่น" หรือ "ผิดเฉพาะข้อยาก แสดงว่ามีพื้นฐานดีแต่ต้องฝึกเพิ่ม") และอธิบายรายละเอียด
+- บอกข้อที่ผิดเด่น ๆ (5-8 ข้อ) และให้เหตุผลว่าทำไมควรแก้ไขอย่างละเอียด (เช่น "Q13 มี p-value ต่ำมาก แสดงว่าเป็นข้อยากที่ควรฝึกเพิ่ม" หรือ "Q1-4 เป็นข้อง่ายแต่ผิดทั้งหมด แสดงว่าพื้นฐานไม่แน่น") และบอกผลกระทบ
+- วิเคราะห์รูปแบบของความผิดพลาด (เช่น ผิดในหน่วยเดียวกันหลายข้อ หรือผิดในแนวคิดเฉพาะ)
+- อธิบายความเร่งด่วนในการแก้ไข (เช่น หน่วยไหนควรแก้ไขก่อน เพราะเป็นพื้นฐานของหน่วยอื่น)
+
+**4. คำแนะนำการเรียน (Learning Guide)** - 6-8 ประโยค
+- ให้คำแนะนำเฉพาะเจาะจงว่าควรเรียนอย่างไรในหน่วยที่อ่อน (เช่น "ควรเริ่มจากพื้นฐานของ Geometry & Vectors แล้วค่อยไปสู่โจทย์ที่ซับซ้อน") และบอกวิธีการเรียน
+- แนะนำลำดับความสำคัญในการแก้ไขอย่างละเอียด (เช่น "ควรแก้ข้อง่ายที่ผิดก่อน เพราะเป็นพื้นฐานสำคัญ" หรือ "ควรเน้นฝึกหน่วยที่อ่อนที่สุดก่อน แล้วค่อยไปหน่วยอื่น") และบอกเหตุผล
+- บอกเป้าหมายการเรียนสำหรับครั้งต่อไป (เช่น "ควรตั้งเป้าคะแนนเพิ่มขึ้น X% หรือควรทำข้อยากให้ได้เพิ่มขึ้น Y ข้อ") และบอกวิธีการวัดผล
+- เสนอแนะแหล่งเรียนรู้หรือวิธีการฝึกฝนที่เหมาะสม (เช่น การอ่านหนังสือ, การทำโจทย์, การติวเสริม)
+- ให้คำแนะนำเรื่องการจัดสรรเวลา (เช่น ควรใช้เวลาเท่าไหร่กับหน่วยไหน)
+- แนะนำการติดตามความคืบหน้า (เช่น จะรู้ได้อย่างไรว่าทำได้ดีขึ้น)
+
+**5. สรุปและแนวโน้ม** - 3-4 ประโยค
+- สรุปภาพรวมความสามารถของนักเรียนในวิชานี้ (เช่น "โดยรวมมีพื้นฐานดี แต่ต้องฝึกเพิ่มในหน่วยที่อ่อน" หรือ "มีความสามารถในการทำข้อยาก แต่ต้องระวังข้อง่าย")
+- บอกแนวโน้มและศักยภาพ (เช่น "มีแนวโน้มที่จะทำได้ดีขึ้นหากแก้ไขจุดอ่อน" หรือ "มีพื้นฐานที่ดีพอที่จะพัฒนาไปได้ไกล")
+- ให้กำลังใจและสร้างแรงจูงใจ (เช่น "แม้จะยังมีจุดที่ต้องปรับปรุง แต่มีความสามารถเพียงพอที่จะประสบความสำเร็จได้")
+- สรุปเป้าหมายและความคาดหวัง (เช่น "หากฝึกฝนตามคำแนะนำข้างต้น คาดว่าจะเห็นผลลัพธ์ที่ดีขึ้นในการสอบครั้งต่อไป")
 
 학생: ${student.name} (ID: ${student.id})
 
-데이터:
-${subjectSummaries.map((subject) => `\n[${subject.name}]\n- 정답/문항수: ${subject.correct}/${subject.totalQuestions}\n- 점수: ${subject.score}%\n- 과목 평균: ${subject.avgScore}%\n- 강점 단원: ${subject.strongestUnits.join(', ') || '없음'}\n- 약점 단원: ${subject.weakestUnits.join(', ') || '없음'}\n- 대표 오답: ${subject.incorrectQuestions.join(', ') || '없음'}`).join('\n')}
-`;
+ข้อมูลสถิติ:
+${subjectSummaries.map((subject) => `
+[${subject.name}]
+- คะแนนรวม: ${subject.correct}/${subject.totalQuestions} ข้อ (${subject.score}%)
+- ค่าเฉลี่ยวิชา: ${subject.avgScore}%
+- Percentile: ${subject.percentile}th
+- Standard Score: ${subject.standardScore}
+- หน่วยที่ทำได้ดี: ${subject.strongestUnits.join(', ') || 'ไม่มี'}
+- หน่วยที่ควรปรับปรุง: ${subject.weakestUnits.join(', ') || 'ไม่มี'}
+- การทำข้อสอบตามระดับความยาก:
+  * ข้อง่าย (p≥0.7): ${subject.difficultyPerformance.easy}
+  * ข้อกลาง (0.3<p<0.7): ${subject.difficultyPerformance.medium}
+  * ข้อยาก (p≤0.3): ${subject.difficultyPerformance.hard}
+- ข้อที่ผิดเด่น: ${subject.incorrectQuestions.join(', ') || 'ไม่มี'}
+- คุณภาพข้อสอบ (KR-20): ${subject.kr20.toFixed(3)} ${subject.kr20 >= 0.8 ? '(ดีมาก)' : subject.kr20 >= 0.7 ? '(ดี)' : subject.kr20 >= 0.6 ? '(พอใช้)' : '(ควรปรับปรุง)'}
+`).join('\n')}
+
+โปรดเขียนรายงานที่ให้กำลังใจแต่ตรงไปตรงมา และให้คำแนะนำที่เป็นประโยชน์จริง ๆ ต่อการเรียนของนักเรียน`;
 
     const completion = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'คุณเป็นผู้เชี่ยวชาญด้านรายงานผลสอบ สรุปให้กระชับและชัดเจนโดยใช้เฉพาะข้อมูลที่ให้มา',
+          content: 'คุณเป็นผู้เชี่ยวชาญด้านการศึกษาและการให้คำปรึกษาทางวิชาการ คุณมีความเชี่ยวชาญในการวิเคราะห์ผลการสอบและให้คำแนะนำการเรียนที่เฉพาะเจาะจงและปฏิบัติได้จริง คุณเขียนรายงานที่ให้กำลังใจนักเรียนแต่ตรงไปตรงมา และให้ข้อมูลที่มีประโยชน์ต่อการเรียนรู้',
         },
         {
           role: 'user',
           content: prompt,
         },
       ],
-      temperature: 0.3,
-      max_tokens: 700,
+      temperature: 0.6,
+      max_tokens: 3000,
     });
 
     const content = completion.choices[0]?.message?.content || '';
@@ -962,6 +1597,7 @@ export async function POST(request: NextRequest) {
         avgScore: stats.avgScore,
         stdDev: stats.stdDev,
         median: stats.median,
+        kr20: stats.kr20,
       });
     }
 

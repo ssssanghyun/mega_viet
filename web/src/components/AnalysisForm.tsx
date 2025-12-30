@@ -135,16 +135,11 @@ export default function AnalysisForm() {
         className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:bg-gray-400"
       >
         {isSubmitting ? (
-          <>
-            <Loader2 className="w-5 h-5 animate-spin" />
-            กำลังสร้างรายงาน...
-          </>
+          <Loader2 className="w-5 h-5 animate-spin" />
         ) : (
-          <>
-            <FileSpreadsheet className="w-5 h-5" />
-            สร้างรายงาน PDF ทั้งหมด
-          </>
+          <FileSpreadsheet className="w-5 h-5" />
         )}
+        {isSubmitting ? 'กำลังสร้างรายงาน...' : 'สร้างรายงาน PDF ทั้งหมด'}
       </button>
 
       {result && (
