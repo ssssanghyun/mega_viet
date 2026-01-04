@@ -314,7 +314,7 @@ function addSubjectSummary(doc, subjectName, student, questionCount, unitResults
   const cardWidth = (contentWidth - 10) / 3;
   const cardHeight = 24;
   const cards = [
-    { label: 'Correct', value: `${student.correctCount}/${questionCount}` },
+    { label: 'Correct', value: `맞은개수, 총점 ${student.correctCount}/${questionCount}` },
     { label: 'Score', value: `${(student.score || 0).toFixed(1)}%` },
     { label: 'Rank', value: `Top ${student.topPercent}%` },
   ];
@@ -362,7 +362,7 @@ function addSubjectSummary(doc, subjectName, student, questionCount, unitResults
 
 function generateStudentPDF(student, subjectsData) {
   const doc = new jsPDF();
-  const studentLabel = `Student: ${student.name} (ID: ${student.id})`;
+  const studentLabel = student.name;
 
   addHeader(doc, 'Score Analysis Report', studentLabel);
 

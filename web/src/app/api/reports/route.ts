@@ -423,10 +423,13 @@ function addSubjectSection(
 
   yPos += 18;
 
-  const cardWidth = (contentWidth - 15) / 4;
+  const cardWidth = (contentWidth - 15) / 5;
   const cardHeight = 24;
+  const totalQuestions = subject.questionNumbers.length;
+  const percentile = 100 - (student.topPercent ?? 100);
   const cards = [
-    { label: 'Standard Score', value: `${student.standardScore ?? 0}` },
+    { label: 'Total Score', value: `맞은개수, 총점 ${student.correctCount ?? 0}/${totalQuestions}` },
+    { label: 'Percentile', value: `${percentile}th` },
     { label: 'Top %', value: `Top ${student.topPercent ?? 100}%` },
     { label: 'Estimated Rank', value: `${student.nationalRank ?? 0}` },
     { label: 'Total Participants', value: `${TOTAL_PARTICIPANTS}` },
@@ -452,7 +455,27 @@ function addSubjectSection(
 
   if (yPos > pageHeight - 80) {
     doc.addPage();
-    addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+    addHeader(doc, 'Score Analysis Report', student.name);
+    yPos = 58;
+  }
+
+  // Difficulty Level Performance 섹션 (먼저)
+  const difficulty = computeDifficultyPerformance(subject, student);
+  if (difficulty.total > 0) {
+    yPos = drawDifficultyPerformanceChart(doc, subject, student, yPos);
+    
+    if (yPos > pageHeight - 80) {
+      doc.addPage();
+      addHeader(doc, 'Score Analysis Report', student.name);
+      yPos = 58;
+    }
+  }
+
+  yPos = drawQuestionRateChart(doc, subject, student, yPos);
+
+  if (yPos > pageHeight - 80) {
+    doc.addPage();
+    addHeader(doc, 'Score Analysis Report', student.name);
     yPos = 58;
   }
 
@@ -480,7 +503,7 @@ function addSubjectSection(
 
   if (yPos > pageHeight - 80) {
     doc.addPage();
-    addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+    addHeader(doc, 'Score Analysis Report', student.name);
     yPos = 58;
   }
 
@@ -508,7 +531,7 @@ function addSubjectSection(
 
   if (yPos > pageHeight - 80) {
     doc.addPage();
-    addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+    addHeader(doc, 'Score Analysis Report', student.name);
     yPos = 58;
   }
 
@@ -539,15 +562,13 @@ function addSubjectSection(
 
   if (yPos > pageHeight - 80) {
     doc.addPage();
-    addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+    addHeader(doc, 'Score Analysis Report', student.name);
     yPos = 58;
   }
 
-  yPos = drawQuestionRateChart(doc, subject, yPos);
-
   if (yPos > pageHeight - 80) {
     doc.addPage();
-    addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+    addHeader(doc, 'Score Analysis Report', student.name);
     yPos = 58;
   }
 
@@ -601,6 +622,53 @@ function drawStudentScatter(doc: jsPDF, subject: SubjectData, student: StudentRe
   const scores = subject.students.map((s) => s.score || 0);
   const minScore = Math.min(...scores, 0);
   const maxScore = Math.max(...scores, 100);
+  const avgScore = scores.length ? scores.reduce((sum, s) => sum + s, 0) / scores.length : 0;
+
+  // 영역 구분을 위한 배경색 추가
+  // 왼쪽 하단: 낮은 점수 영역 (빨간색/주황색 계열 - 연한 색상)
+  doc.setFillColor(254, 226, 226); // 연한 빨간색
+  doc.rect(chartLeft, chartTop + chartHeight / 2, chartWidth / 2, chartHeight / 2, 'F');
+  
+  // 오른쪽 상단: 높은 점수 영역 (초록색/파란색 계열 - 연한 색상)
+  doc.setFillColor(219, 234, 254); // 연한 파란색
+  doc.rect(chartLeft + chartWidth / 2, chartTop, chartWidth / 2, chartHeight / 2, 'F');
+
+  // 평균 기준선 (수평선)
+  const avgY = chartBottom - ((avgScore - minScore) / (maxScore - minScore || 1) * chartHeight);
+  doc.setDrawColor(59, 130, 246);
+  doc.setLineWidth(1);
+  doc.setLineDashPattern([5, 5], 0);
+  doc.line(chartLeft, avgY, chartLeft + chartWidth, avgY);
+  doc.setLineDashPattern([], 0);
+
+  // 대각선 기준선 (왼쪽 하단에서 오른쪽 상단으로)
+  doc.setDrawColor(156, 163, 175);
+  doc.setLineWidth(0.5);
+  doc.setLineDashPattern([3, 3], 0);
+  doc.line(chartLeft, chartBottom, chartLeft + chartWidth, chartTop);
+  doc.setLineDashPattern([], 0);
+
+  // 영역 레이블 추가
+  doc.setFontSize(7);
+  // 왼쪽 하단: "낮은 점수"
+  doc.setTextColor(220, 38, 38); // 빨간색
+  doc.setFont('helvetica', 'bold');
+  doc.text('낮은 점수', chartLeft + 5, chartBottom - 5);
+  
+  // 오른쪽 상단: "높은 점수"
+  doc.setTextColor(34, 197, 94); // 초록색
+  doc.text('높은 점수', chartLeft + chartWidth - 35, chartTop + 8);
+
+  // 평균 기준선 레이블
+  doc.setFontSize(6);
+  doc.setTextColor(59, 130, 246);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`평균 ${avgScore.toFixed(1)}`, chartLeft + chartWidth - 40, avgY - 2);
+
+  // 그래프 테두리 다시 그리기 (배경색 위에)
+  doc.setDrawColor(229, 231, 235);
+  doc.setLineWidth(1);
+  doc.rect(chartLeft, chartTop, chartWidth, chartHeight);
 
   subject.students.forEach((entry) => {
     const x = chartLeft + (subject.students.length > 1 ? (entry.rank! - 1) / (subject.students.length - 1) * chartWidth : chartWidth / 2);
@@ -625,7 +693,8 @@ function drawStudentScatter(doc: jsPDF, subject: SubjectData, student: StudentRe
   const statsY = chartBottom + 16;
   doc.setFontSize(8);
   doc.setTextColor(60, 60, 60);
-  doc.text(`Standard Score: ${student.standardScore ?? 0}`, chartLeft, statsY);
+  const percentile = 100 - (student.topPercent ?? 100);
+  doc.text(`Percentile: ${percentile}th`, chartLeft, statsY);
   doc.text(`Top ${student.topPercent ?? 100}%`, chartLeft + 90, statsY);
   doc.text(`Est. Rank: ${student.nationalRank ?? 0}`, chartLeft, statsY + 10);
   doc.text(`Total: ${TOTAL_PARTICIPANTS}`, chartLeft + 90, statsY + 10);
@@ -637,21 +706,14 @@ function buildThaiInterpretation(subject: SubjectData, student: StudentRecord) {
   const lines: string[] = [];
   const topPercent = student.topPercent ?? 100;
   const nationalRank = student.nationalRank ?? 0;
-  const standardScore = student.standardScore ?? 0;
+  const percentile = 100 - topPercent;
 
   lines.push(`• อันดับระดับประเทศ: อยู่ในกลุ่มบน ${topPercent}% (ประมาณ ${nationalRank} จาก ${TOTAL_PARTICIPANTS} คน)`);
-  lines.push(`• คะแนนปรับมาตรฐาน (Standard Score): ${standardScore} ใช้เทียบความสามารถกับค่าเฉลี่ยรวม`);
-
-  const difficulty = computeDifficultyPerformance(subject, student);
-  if (difficulty.total > 0) {
-    lines.push(
-      `• ความยากง่าย: ง่าย ${difficulty.easy.correct}/${difficulty.easy.total}, กลาง ${difficulty.medium.correct}/${difficulty.medium.total}, ยาก ${difficulty.hard.correct}/${difficulty.hard.total}`
-    );
-  }
+  lines.push(`• Percentile: ${percentile}th (แสดงว่าคะแนนของคุณสูงกว่าผู้สอบ ${percentile}% ของผู้สอบทั้งหมด)`);
 
   const peerInfo = computePeerBand(subject, student, 5);
   if (peerInfo.count > 0) {
-    lines.push(`• กลุ่มคะแนนใกล้เคียง (±5): ${peerInfo.count} คน เฉลี่ย ${peerInfo.avg.toFixed(1)}%`);
+    lines.push(`• นักเรียนที่มีระดับการเรียนรู้เดียวกัน: ${peerInfo.count} คน`);
   }
 
   return lines;
@@ -722,7 +784,7 @@ function buildThaiUnitSummary(subject: SubjectData, student: StudentRecord) {
   ];
 }
 
-function drawQuestionRateChart(doc: jsPDF, subject: SubjectData, startY: number) {
+function drawQuestionRateChart(doc: jsPDF, subject: SubjectData, student: StudentRecord, startY: number) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 15;
   const contentWidth = pageWidth - margin * 2;
@@ -745,7 +807,19 @@ function drawQuestionRateChart(doc: jsPDF, subject: SubjectData, startY: number)
     const rate = stat && stat.total ? stat.correct / stat.total : 0;
     const height = rate * maxHeight;
     const x = margin + idx * barWidth;
-    doc.setFillColor(147, 197, 253);
+    
+    // 학생이 해당 문제를 맞췄는지 확인
+    const correctAnswer = subject.answerMap.get(qNum) || 0;
+    const studentAnswer = student.answers[idx] || 0;
+    const isCorrect = studentAnswer !== 0 && studentAnswer === correctAnswer;
+    
+    // 맞힌 문항: 파란색, 틀린 문항: 빨간색/주황색
+    if (isCorrect) {
+      doc.setFillColor(147, 197, 253); // 파란색 (맞힌 문항)
+    } else {
+      doc.setFillColor(251, 146, 60); // 주황색 (틀린 문항)
+    }
+    
     doc.rect(x + 1, chartTop + (maxHeight - height), Math.max(1, barWidth - 2), height, 'F');
   });
 
@@ -758,6 +832,75 @@ function drawQuestionRateChart(doc: jsPDF, subject: SubjectData, startY: number)
   });
 
   return chartTop + maxHeight + 12;
+}
+
+function drawDifficultyPerformanceChart(doc: jsPDF, subject: SubjectData, student: StudentRecord, startY: number) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 15;
+  const contentWidth = pageWidth - margin * 2;
+  const chartHeight = 50;
+  const yPos = startY;
+
+  doc.setFillColor(59, 130, 246);
+  doc.rect(margin, yPos, 3, 12, 'F');
+  doc.setFontSize(11);
+  doc.setTextColor(59, 130, 246);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Difficulty Level Performance', margin + 8, yPos + 9);
+
+  const chartTop = yPos + 18;
+  const chartLeft = margin;
+  const chartWidth = contentWidth;
+  const chartBottom = chartTop + chartHeight;
+  const barWidth = chartWidth / 3;
+  const maxHeight = chartHeight - 20; // 레이블 공간 확보
+
+  const difficulty = computeDifficultyPerformance(subject, student);
+  
+  // 그래프 배경
+  doc.setDrawColor(229, 231, 235);
+  doc.rect(chartLeft, chartTop, chartWidth, chartHeight);
+
+  // 각 난이도별 바 차트 그리기
+  const levels = [
+    { key: 'easy', label: 'Easy', color: [34, 197, 94], data: difficulty.easy }, // 초록색
+    { key: 'medium', label: 'Medium', color: [251, 191, 36], data: difficulty.medium }, // 노란색
+    { key: 'hard', label: 'Hard', color: [239, 68, 68], data: difficulty.hard }, // 빨간색
+  ];
+
+  levels.forEach((level, idx) => {
+    const x = chartLeft + idx * barWidth;
+    const rate = level.data.total > 0 ? (level.data.correct / level.data.total) * 100 : 0;
+    const height = (rate / 100) * maxHeight;
+    const barY = chartBottom - height - 5;
+
+    // 바 차트
+    doc.setFillColor(level.color[0], level.color[1], level.color[2]);
+    doc.rect(x + 5, barY, barWidth - 10, height, 'F');
+
+    // 정답률 텍스트
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${rate.toFixed(0)}%`, x + barWidth / 2, barY - 3, { align: 'center' });
+
+    // 레이블 (Easy/Medium/Hard)
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text(level.label, x + barWidth / 2, chartBottom + 8, { align: 'center' });
+
+    // 정답/전체 표시
+    doc.setFontSize(6);
+    doc.text(`${level.data.correct}/${level.data.total}`, x + barWidth / 2, chartBottom + 15, { align: 'center' });
+  });
+
+  // Y축 레이블
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Correct Rate (%)', chartLeft - 5, chartTop + chartHeight / 2, { angle: -90, align: 'center' });
+
+  return chartBottom + 20;
 }
 
 async function generateAISummary(
@@ -810,7 +953,7 @@ async function generateAISummary(
 - จุดแข็ง/จุดอ่อนต้องอ้างอิงจากสัดส่วนถูก/ทั้งหมดของหน่วยนั้นจริง
 - ขึ้นหัวข้อแต่ละวิชาด้วยรูปแบบ [ชื่อวิชา] เช่น [MATH 1]
 
-학생: ${student.name} (ID: ${student.id})
+학생: ${student.name}
 
 데이터:
 ${subjectSummaries.map((subject) => `\n[${subject.name}]\n- 정답/문항수: ${subject.correct}/${subject.totalQuestions}\n- 점수: ${subject.score}%\n- 과목 평균: ${subject.avgScore}%\n- 강점 단원: ${subject.strongestUnits.join(', ') || '없음'}\n- 약점 단원: ${subject.weakestUnits.join(', ') || '없음'}\n- 대표 오답: ${subject.incorrectQuestions.join(', ') || '없음'}`).join('\n')}
@@ -889,10 +1032,10 @@ function buildDeterministicSummary(
     .join('\n\n');
 }
 
-function appendAISummary(doc: jsPDF, text: string) {
+function appendAISummary(doc: jsPDF, text: string, studentName: string) {
   if (!text) return;
   doc.addPage();
-  addHeader(doc, 'AI Summary', '');
+  addHeader(doc, 'AI Summary', studentName);
   const thaiReady = registerThaiFont(doc);
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -1009,7 +1152,7 @@ export async function POST(request: NextRequest) {
       const studentSubjects = subjects.filter((subject) => student.subjects[subject.key]);
       for (const subject of studentSubjects) {
         const doc = new jsPDF();
-        addHeader(doc, 'Score Analysis Report', `Student: ${student.name} (ID: ${student.id})`);
+        addHeader(doc, 'Score Analysis Report', student.name);
 
         let yPos = 58;
         yPos = addSubjectSection(
@@ -1021,7 +1164,7 @@ export async function POST(request: NextRequest) {
         );
 
         const aiSummary = await generateAISummary(student, [subject]);
-        appendAISummary(doc, aiSummary);
+        appendAISummary(doc, aiSummary, student.name);
 
         const fileName = `Report_${sanitizeFilename(subject.key)}_${sanitizeFilename(student.id)}_${sanitizeFilename(student.name)}.pdf`;
         const pdfArrayBuffer = doc.output('arraybuffer');
